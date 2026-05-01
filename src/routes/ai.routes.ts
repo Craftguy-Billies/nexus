@@ -3,6 +3,7 @@ import { aiService } from '../services/ai.service';
 import { aiCharacterService } from '../services/aiCharacter.service';
 import { tokenUsageTracker } from '../services/tokenUsage.service';
 import { moderationService } from '../services/moderation.service';
+import { visionService } from '../services/vision.service';
 import { authMiddleware } from '../middleware/auth';
 import { aiLimiter } from '../middleware/rateLimiter';
 import { AuthenticatedRequest } from '../types';
@@ -210,6 +211,70 @@ router.post(
         req.body
       );
       res.status(201).json(character);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ─── Vision / Image Recognition ───────────────────────────
+
+router.post(
+  '/vision/analyze',
+  authMiddleware,
+  aiLimiter,
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const { imageUrl } = req.body;
+      if (!imageUrl) {
+        res.status(400).json({ error: 'imageUrl is required' });
+        return;
+      }
+      const analysis = await visionService.analyzeImage(imageUrl);
+      res.json(analysis);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.post(
+  '/vision/comment',
+  authMiddleware,
+  aiLimiter,
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const { aiCharacterId, imageUrl, postCaption } = req.body;
+      if (!aiCharacterId || !imageUrl) {
+        res.status(400).json({ error: 'aiCharacterId and imageUrl are required' });
+        return;
+      }
+      const character = await aiCharacterService.getCharacter(aiCharacterId);
+      const result = await visionService.generateImageComment(
+        character,
+        imageUrl,
+        postCaption
+      );
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.post(
+  '/vision/suggest-tags',
+  authMiddleware,
+  aiLimiter,
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const { imageUrl } = req.body;
+      if (!imageUrl) {
+        res.status(400).json({ error: 'imageUrl is required' });
+        return;
+      }
+      const tags = await visionService.suggestTags(imageUrl);
+      res.json({ tags });
     } catch (err) {
       next(err);
     }
