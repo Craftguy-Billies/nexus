@@ -1,0 +1,546 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// User (Human)
+// ============================================================
+model User {
+  id          String   @id @default(uuid())
+  firebaseUid String   @unique @map("firebase_uid")
+  username    String   @unique
+  email       String   @unique
+  displayName String   @map("display_name")
+  bio         String?
+  avatar      String?
+  coverImage  String?  @map("cover_image")
+
+  followerCount  Int @default(0) @map("follower_count")
+  followingCount Int @default(0) @map("following_count")
+  postCount      Int @default(0) @map("post_count")
+
+  isPrivate  Boolean @default(false) @map("is_private")
+  isVerified Boolean @default(false) @map("is_verified")
+
+  isPremium        Boolean          @default(false) @map("is_premium")
+  subscriptionTier SubscriptionTier @default(free) @map("subscription_tier")
+
+  energyBalance        Int      @default(30) @map("energy_balance")
+  energyLastRefreshedAt DateTime @default(now()) @map("energy_last_refreshed_at")
+  gemsBalance          Int      @default(0) @map("gems_balance")
+
+  isActive    Boolean   @default(true) @map("is_active")
+  isBanned    Boolean   @default(false) @map("is_banned")
+  banReason   String?   @map("ban_reason")
+  lastActiveAt DateTime @default(now()) @map("last_active_at")
+
+  expoPushToken       String?   @map("expo_push_token")
+  pushTokenUpdatedAt  DateTime? @map("push_token_updated_at")
+
+  notifyNewFollower   Boolean @default(true) @map("notify_new_follower")
+  notifyNewLike       Boolean @default(true) @map("notify_new_like")
+  notifyNewComment    Boolean @default(true) @map("notify_new_comment")
+  notifyAiInteraction Boolean @default(true) @map("notify_ai_interaction")
+  notifySystemAlerts  Boolean @default(true) @map("notify_system_alerts")
+  notifyMarketing     Boolean @default(false) @map("notify_marketing")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  posts         Post[]
+  comments      Comment[]
+  likes         Like[]
+  followsGiven  Follow[]           @relation("follower")
+  followsReceived Follow[]         @relation("following")
+  subscription  UserSubscription?
+  inventory     UserInventory?
+  notifications Notification[]
+  tokenUsages   TokenUsage[]       @relation("triggeredBy")
+  admins        Admin[]
+
+  @@map("users")
+}
+
+// ============================================================
+// AI Character
+// ============================================================
+model AICharacter {
+  id          String  @id @default(uuid())
+  username    String  @unique
+  displayName String  @map("display_name")
+  avatar      String
+  coverImage  String? @map("cover_image")
+  bio         String
+
+  persona    String
+  backstory  String  @default("")
+  interests  String[]
+  expertise  String[]
+  universeId String? @map("universe_id")
+
+  // Personality profile (Big Five + extended) stored as JSON
+  personalityProfile Json @map("personality_profile")
+
+  // LLM response style stored as JSON
+  responseStyle Json @map("response_style")
+
+  // Activity schedule stored as JSON
+  activitySchedule Json @map("activity_schedule")
+
+  followerCount  Int @default(0) @map("follower_count")
+  followingCount Int @default(0) @map("following_count")
+  totalPosts     Int @default(0) @map("total_posts")
+  totalLikes     Int @default(0) @map("total_likes")
+  totalComments  Int @default(0) @map("total_comments")
+
+  monthlyTokenBudget  Int @default(500000) @map("monthly_token_budget")
+  totalTokensConsumed Int @default(0) @map("total_tokens_consumed")
+  currentMonthTokens  Int @default(0) @map("current_month_tokens")
+
+  isActive  Boolean @default(true) @map("is_active")
+  isPublic  Boolean @default(true) @map("is_public")
+  createdBy String  @map("created_by")
+
+  // Relationship memories stored as JSON
+  userRelationships Json? @map("user_relationships")
+
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  lastInteractionAt DateTime? @map("last_interaction_at")
+
+  universe    Universe?    @relation(fields: [universeId], references: [id])
+  posts       Post[]
+  comments    Comment[]
+  likes       Like[]
+  tokenUsages TokenUsage[]
+  scenarioCharacters ScenarioCharacter[]
+
+  @@map("ai_characters")
+}
+
+// ============================================================
+// Post
+// ============================================================
+model Post {
+  id        String   @id @default(uuid())
+  content   String
+  mediaUrls String[] @map("media_urls")
+  mediaTypes String[] @map("media_types")
+
+  authorId   String     @map("author_id")
+  authorType AuthorType @map("author_type")
+  isAI       Boolean    @default(false) @map("is_ai")
+
+  isEdited   Boolean @default(false) @map("is_edited")
+  isPinned   Boolean @default(false) @map("is_pinned")
+  isArchived Boolean @default(false) @map("is_archived")
+
+  likesCount    Int @default(0) @map("likes_count")
+  commentsCount Int @default(0) @map("comments_count")
+  sharesCount   Int @default(0) @map("shares_count")
+  viewsCount    Int @default(0) @map("views_count")
+
+  tags     String[]
+  mentions String[]
+
+  // AI generation metadata stored as JSON
+  aiGenerationMeta Json? @map("ai_generation_meta")
+
+  moderationStatus  ModerationStatus @default(pending) @map("moderation_status")
+  moderationDetails Json?            @map("moderation_details")
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  publishedAt DateTime? @map("published_at")
+
+  humanAuthor User?        @relation(fields: [authorId], references: [id], map: "post_human_author")
+  aiAuthor    AICharacter? @relation(fields: [authorId], references: [id], map: "post_ai_author")
+  comments    Comment[]
+  likes       Like[]
+
+  @@index([authorId, authorType])
+  @@index([createdAt])
+  @@index([moderationStatus])
+  @@map("posts")
+}
+
+// ============================================================
+// Comment
+// ============================================================
+model Comment {
+  id     String @id @default(uuid())
+  postId String @map("post_id")
+
+  authorId   String     @map("author_id")
+  authorType AuthorType @map("author_type")
+  isAI       Boolean    @default(false) @map("is_ai")
+
+  content  String
+  parentId String? @map("parent_id")
+
+  likesCount Int     @default(0) @map("likes_count")
+  isEdited   Boolean @default(false) @map("is_edited")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  post        Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent      Comment?     @relation("CommentReplies", fields: [parentId], references: [id])
+  replies     Comment[]    @relation("CommentReplies")
+  humanAuthor User?        @relation(fields: [authorId], references: [id], map: "comment_human_author")
+  aiAuthor    AICharacter? @relation(fields: [authorId], references: [id], map: "comment_ai_author")
+
+  @@index([postId])
+  @@index([parentId])
+  @@map("comments")
+}
+
+// ============================================================
+// Like
+// ============================================================
+model Like {
+  id     String @id @default(uuid())
+  postId String @map("post_id")
+
+  authorId   String     @map("author_id")
+  authorType AuthorType @map("author_type")
+  isAI       Boolean    @default(false) @map("is_ai")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post        Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  humanAuthor User?        @relation(fields: [authorId], references: [id], map: "like_human_author")
+  aiAuthor    AICharacter? @relation(fields: [authorId], references: [id], map: "like_ai_author")
+
+  @@unique([postId, authorId])
+  @@map("likes")
+}
+
+// ============================================================
+// Follow
+// ============================================================
+model Follow {
+  id            String       @id @default(uuid())
+  followerId    String       @map("follower_id")
+  followerType  AuthorType   @map("follower_type")
+  followingId   String       @map("following_id")
+  followingType AuthorType   @map("following_type")
+  status        FollowStatus @default(active)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  follower  User @relation("follower", fields: [followerId], references: [id])
+  following User @relation("following", fields: [followingId], references: [id])
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+  @@map("follows")
+}
+
+// ============================================================
+// Token Usage
+// ============================================================
+model TokenUsage {
+  id              String @id @default(uuid())
+  aiCharacterId   String @map("ai_character_id")
+  triggeredByUserId String? @map("triggered_by_user_id")
+
+  promptTokens     Int @map("prompt_tokens")
+  completionTokens Int @map("completion_tokens")
+  totalTokens      Int @map("total_tokens")
+
+  model    String
+  provider String
+
+  costPer1KInputTokens  Float @map("cost_per_1k_input_tokens")
+  costPer1KOutputTokens Float @map("cost_per_1k_output_tokens")
+  totalCostUsd          Float @map("total_cost_usd")
+
+  operation String
+  yearMonth String @map("year_month")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  aiCharacter   AICharacter @relation(fields: [aiCharacterId], references: [id])
+  triggeredBy   User?       @relation("triggeredBy", fields: [triggeredByUserId], references: [id])
+
+  @@index([aiCharacterId, yearMonth])
+  @@index([yearMonth])
+  @@map("token_usages")
+}
+
+// ============================================================
+// User Subscription
+// ============================================================
+model UserSubscription {
+  id     String @id @default(uuid())
+  userId String @unique @map("user_id")
+
+  tier   SubscriptionTier   @default(free)
+  status SubscriptionStatus @default(active)
+
+  revenueCatCustomerId    String? @map("revenuecat_customer_id")
+  revenueCatEntitlementId String? @map("revenuecat_entitlement_id")
+
+  startedAt   DateTime  @default(now()) @map("started_at")
+  expiresAt   DateTime? @map("expires_at")
+  cancelledAt DateTime? @map("cancelled_at")
+  willRenew   Boolean   @default(false) @map("will_renew")
+
+  // Feature flags stored as JSON
+  features Json @default("{}")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("user_subscriptions")
+}
+
+// ============================================================
+// User Inventory (Virtual Economy)
+// ============================================================
+model UserInventory {
+  id     String @id @default(uuid())
+  userId String @unique @map("user_id")
+
+  energyBalance Int @default(30) @map("energy_balance")
+  gemsBalance   Int @default(0) @map("gems_balance")
+
+  // Items stored as JSON array
+  items Json @default("[]")
+
+  currentStreak  Int      @default(0) @map("current_streak")
+  longestStreak  Int      @default(0) @map("longest_streak")
+  lastStreakDate DateTime @default(now()) @map("last_streak_date")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("user_inventories")
+}
+
+// ============================================================
+// Universe (Fan Circle / World)
+// ============================================================
+model Universe {
+  id          String @id @default(uuid())
+  name        String @unique
+  description String
+  coverImage  String @map("cover_image")
+
+  lore  String
+  rules String[]
+
+  memberCount     Int   @default(0) @map("member_count")
+  aiCharacterCount Int  @default(0) @map("ai_character_count")
+  postCount       Int   @default(0) @map("post_count")
+  trendingScore   Float @default(0) @map("trending_score")
+
+  isOfficial Boolean @default(false) @map("is_official")
+  creatorId  String  @map("creator_id")
+  tags       String[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  aiCharacters AICharacter[]
+  scenarios    Scenario[]
+
+  @@map("universes")
+}
+
+// ============================================================
+// Scenario (Multiplayer)
+// ============================================================
+model Scenario {
+  id          String @id @default(uuid())
+  title       String
+  description String
+  coverImage  String @map("cover_image")
+
+  universeId String? @map("universe_id")
+  creatorId  String  @map("creator_id")
+
+  maxHumanPlayers Int      @default(1) @map("max_human_players")
+  currentPlayers  String[] @map("current_players")
+
+  isPublic Boolean @default(true) @map("is_public")
+  isActive Boolean @default(true) @map("is_active")
+
+  sceneSetting String @map("scene_setting")
+  plotPoints   Json   @default("[]") @map("plot_points")
+
+  likesCount Int @default(0) @map("likes_count")
+  playCount  Int @default(0) @map("play_count")
+
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  lastPlayedAt DateTime? @map("last_played_at")
+
+  universe   Universe? @relation(fields: [universeId], references: [id])
+  characters ScenarioCharacter[]
+
+  @@map("scenarios")
+}
+
+model ScenarioCharacter {
+  id            String @id @default(uuid())
+  scenarioId    String @map("scenario_id")
+  aiCharacterId String @map("ai_character_id")
+
+  scenario    Scenario    @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  aiCharacter AICharacter @relation(fields: [aiCharacterId], references: [id])
+
+  @@unique([scenarioId, aiCharacterId])
+  @@map("scenario_characters")
+}
+
+// ============================================================
+// Notification
+// ============================================================
+model Notification {
+  id     String @id @default(uuid())
+  userId String @map("user_id")
+
+  type    NotificationType
+  title   String
+  body    String
+  data    Json?
+
+  isRead Boolean @default(false) @map("is_read")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ============================================================
+// Admin
+// ============================================================
+model Admin {
+  id     String @id @default(uuid())
+  userId String @map("user_id")
+
+  role        AdminRole
+  permissions String[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId])
+  @@map("admins")
+}
+
+// ============================================================
+// Offline Queue (for sync)
+// ============================================================
+model OfflineAction {
+  id         String @id @default(uuid())
+  userId     String @map("user_id")
+  actionType String @map("action_type")
+  actionData Json   @map("action_data")
+  priority   Int    @default(5)
+  status     String @default("pending")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, status])
+  @@map("offline_actions")
+}
+
+// ============================================================
+// Direct Message (DM) for AI chat
+// ============================================================
+model DirectMessage {
+  id              String @id @default(uuid())
+  conversationId  String @map("conversation_id")
+  senderId        String @map("sender_id")
+  senderType      AuthorType @map("sender_type")
+  content         String
+  
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([conversationId, createdAt])
+  @@map("direct_messages")
+}
+
+model Conversation {
+  id            String @id @default(uuid())
+  userId        String @map("user_id")
+  aiCharacterId String @map("ai_character_id")
+  
+  lastMessageAt DateTime? @map("last_message_at")
+  messageSummary String?  @map("message_summary")
+  messageCount   Int      @default(0) @map("message_count")
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, aiCharacterId])
+  @@index([userId])
+  @@map("conversations")
+}
+
+// ============================================================
+// Enums
+// ============================================================
+enum AuthorType {
+  human
+  ai
+}
+
+enum SubscriptionTier {
+  free
+  premium
+  pro
+}
+
+enum SubscriptionStatus {
+  active
+  cancelled
+  expired
+  grace_period
+}
+
+enum ModerationStatus {
+  pending
+  approved
+  rejected
+  flagged
+}
+
+enum FollowStatus {
+  active
+  pending
+  blocked
+}
+
+enum NotificationType {
+  new_follower
+  new_like
+  new_comment
+  ai_interaction
+  system_alert
+  energy_refill
+  streak_reward
+}
+
+enum AdminRole {
+  super_admin
+  moderator
+  support
+}
