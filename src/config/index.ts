@@ -26,9 +26,13 @@ export const config = {
   },
 
   ai: {
+    provider: (process.env.AI_PROVIDER || 'nvidia') as 'nvidia' | 'openai' | 'anthropic',
+    nvidiaApiKey: process.env.NVIDIA_API_KEY || '',
+    nvidiaBaseUrl: process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
+    nvidiaModel: process.env.NVIDIA_MODEL || 'meta/llama-3.3-70b-instruct',
     openaiApiKey: process.env.OPENAI_API_KEY || '',
     anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
-    defaultModel: 'gpt-4o-mini',
+    defaultModel: process.env.AI_MODEL || 'meta/llama-3.3-70b-instruct',
     moderationModel: 'text-moderation-latest',
   },
 

@@ -4,6 +4,29 @@ import { config } from '../config';
 import prisma from '../config/database';
 import { AuthenticatedRequest, AuthPayload } from '../types';
 import { UnauthorizedError, ForbiddenError } from '../utils/errors';
+import { verifyFirebaseToken } from '../config/firebase';
+
+async function resolveToken(token: string): Promise<AuthPayload | null> {
+  // Try local JWT first
+  try {
+    return jwt.verify(token, config.jwt.secret) as AuthPayload;
+  } catch {
+    // Not a local JWT — try Firebase
+  }
+
+  // Try Firebase ID token
+  const decoded = await verifyFirebaseToken(token);
+  if (decoded) {
+    const user = await prisma.user.findUnique({
+      where: { firebaseUid: decoded.uid },
+    });
+    if (user) {
+      return { userId: user.id, firebaseUid: decoded.uid };
+    }
+  }
+
+  return null;
+}
 
 export function authMiddleware(
   req: AuthenticatedRequest,
@@ -18,13 +41,18 @@ export function authMiddleware(
 
   const token = authHeader.split(' ')[1];
 
-  try {
-    const decoded = jwt.verify(token, config.jwt.secret) as AuthPayload;
-    req.user = decoded;
-    next();
-  } catch {
-    next(new UnauthorizedError('Invalid or expired token'));
-  }
+  resolveToken(token)
+    .then((payload) => {
+      if (!payload) {
+        next(new UnauthorizedError('Invalid or expired token'));
+        return;
+      }
+      req.user = payload;
+      next();
+    })
+    .catch(() => {
+      next(new UnauthorizedError('Invalid or expired token'));
+    });
 }
 
 export function optionalAuth(
@@ -35,14 +63,17 @@ export function optionalAuth(
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
-    try {
-      const decoded = jwt.verify(token, config.jwt.secret) as AuthPayload;
-      req.user = decoded;
-    } catch {
-      // Token invalid, continue without auth
-    }
+    resolveToken(token)
+      .then((payload) => {
+        if (payload) req.user = payload;
+        next();
+      })
+      .catch(() => {
+        next();
+      });
+  } else {
+    next();
   }
-  next();
 }
 
 export function adminMiddleware(requiredPermissions?: string[]) {

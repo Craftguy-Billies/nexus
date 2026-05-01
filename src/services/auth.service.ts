@@ -9,8 +9,68 @@ import {
   ValidationError,
   NotFoundError,
 } from '../utils/errors';
+import { getFirebaseAdmin } from '../config/firebase';
+import * as admin from 'firebase-admin';
 
 export class AuthService {
+  /**
+   * Register with Firebase ID token (from mobile app).
+   * The client signs up via Firebase Auth SDK, then sends the idToken here.
+   */
+  async registerWithFirebase(input: {
+    firebaseIdToken: string;
+    username: string;
+    displayName: string;
+  }) {
+    if (!input.firebaseIdToken || !input.username || !input.displayName) {
+      throw new ValidationError('firebaseIdToken, username, and displayName are required');
+    }
+
+    const username = input.username.toLowerCase();
+    this.validateUsername(username);
+
+    const app = getFirebaseAdmin();
+    if (!app) {
+      throw new ValidationError('Firebase is not configured');
+    }
+
+    const decoded = await admin.auth(app).verifyIdToken(input.firebaseIdToken);
+    const firebaseUid = decoded.uid;
+    const email = decoded.email || '';
+
+    const existingByUid = await prisma.user.findUnique({
+      where: { firebaseUid },
+    });
+    if (existingByUid) {
+      throw new ConflictError('Firebase account already registered');
+    }
+
+    const existingByUsername = await prisma.user.findUnique({
+      where: { username },
+    });
+    if (existingByUsername) {
+      throw new ConflictError('Username already taken');
+    }
+
+    if (email) {
+      const existingByEmail = await prisma.user.findUnique({
+        where: { email },
+      });
+      if (existingByEmail) {
+        throw new ConflictError('Email already registered');
+      }
+    }
+
+    const user = await this.createUserRecord(firebaseUid, email, username, input.displayName);
+    const token = this.generateAccessToken(user.id, firebaseUid);
+    const refreshToken = this.generateRefreshToken(user.id, firebaseUid);
+
+    return { user: this.sanitizeUser(user), token, refreshToken };
+  }
+
+  /**
+   * Local register (email+password) — for dev/testing without Firebase client SDK.
+   */
   async register(input: {
     email: string;
     password: string;
@@ -21,19 +81,12 @@ export class AuthService {
       throw new ValidationError('All fields are required');
     }
 
-    if (input.username.length < 3 || input.username.length > 30) {
-      throw new ValidationError('Username must be 3-30 characters');
-    }
-
-    if (!/^[a-zA-Z0-9_]+$/.test(input.username)) {
-      throw new ValidationError('Username can only contain letters, numbers, and underscores');
-    }
+    const username = input.username.toLowerCase();
+    this.validateUsername(username);
 
     if (input.password.length < 8) {
       throw new ValidationError('Password must be at least 8 characters');
     }
-
-    const username = input.username.toLowerCase();
 
     const existingUser = await prisma.user.findFirst({
       where: { OR: [{ username }, { email: input.email }] },
@@ -48,50 +101,9 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(input.password, 12);
-
-    // In production, you'd create a Firebase user here and use its UID.
-    // For now, we generate a mock firebaseUid from the password hash.
     const firebaseUid = `local_${Buffer.from(passwordHash).toString('base64').slice(0, 28)}`;
 
-    const user = await prisma.user.create({
-      data: {
-        firebaseUid,
-        email: input.email,
-        username,
-        displayName: input.displayName,
-        subscriptionTier: 'free',
-        energyBalance: 30,
-        gemsBalance: 0,
-        followerCount: 0,
-        followingCount: 0,
-        postCount: 0,
-        isPrivate: false,
-        isVerified: false,
-        isPremium: false,
-        isActive: true,
-        isBanned: false,
-      },
-    });
-
-    // Create default subscription
-    await prisma.userSubscription.create({
-      data: {
-        userId: user.id,
-        tier: 'free',
-        status: 'active',
-        features: config.subscription.tiers.free,
-      },
-    });
-
-    // Create default inventory
-    await prisma.userInventory.create({
-      data: {
-        userId: user.id,
-        energyBalance: 30,
-        gemsBalance: 0,
-      },
-    });
-
+    const user = await this.createUserRecord(firebaseUid, input.email, username, input.displayName);
     const token = this.generateAccessToken(user.id, firebaseUid);
     const refreshToken = this.generateRefreshToken(user.id, firebaseUid);
 
@@ -102,9 +114,43 @@ export class AuthService {
     };
   }
 
+  /**
+   * Login with Firebase ID token (from mobile app).
+   */
+  async loginWithFirebase(firebaseIdToken: string) {
+    const app = getFirebaseAdmin();
+    if (!app) {
+      throw new ValidationError('Firebase is not configured');
+    }
+
+    const decoded = await admin.auth(app).verifyIdToken(firebaseIdToken);
+    const user = await prisma.user.findUnique({
+      where: { firebaseUid: decoded.uid },
+    });
+
+    if (!user) {
+      throw new NotFoundError('No account found for this Firebase user. Please register first.');
+    }
+
+    if (user.isBanned) {
+      throw new UnauthorizedError(`Account banned: ${user.banReason || 'Contact support'}`);
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastActiveAt: new Date() },
+    });
+
+    const token = this.generateAccessToken(user.id, user.firebaseUid);
+    const refreshToken = this.generateRefreshToken(user.id, user.firebaseUid);
+
+    return { user: this.sanitizeUser(user), token, refreshToken };
+  }
+
+  /**
+   * Local login (email+password) — for dev/testing.
+   */
   async login(input: { email: string; password: string }) {
-    // In a full Firebase implementation, you'd verify with Firebase Auth.
-    // Here we do local password comparison using the firebaseUid as a stand-in.
     const user = await prisma.user.findUnique({
       where: { email: input.email },
     });
@@ -116,10 +162,6 @@ export class AuthService {
     if (user.isBanned) {
       throw new UnauthorizedError(`Account banned: ${user.banReason || 'Contact support'}`);
     }
-
-    // For the stub auth, we accept any password since we can't reverse-verify.
-    // In production, Firebase Auth handles password verification.
-    // The local stub stores a hash prefix in firebaseUid - for dev, accept all.
 
     await prisma.user.update({
       where: { id: user.id },
@@ -187,6 +229,61 @@ export class AuthService {
       config.jwt.refreshSecret,
       { expiresIn: config.jwt.refreshExpiresIn }
     );
+  }
+
+  private validateUsername(username: string): void {
+    if (username.length < 3 || username.length > 30) {
+      throw new ValidationError('Username must be 3-30 characters');
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      throw new ValidationError('Username can only contain letters, numbers, and underscores');
+    }
+  }
+
+  private async createUserRecord(
+    firebaseUid: string,
+    email: string,
+    username: string,
+    displayName: string
+  ) {
+    const user = await prisma.user.create({
+      data: {
+        firebaseUid,
+        email,
+        username,
+        displayName,
+        subscriptionTier: 'free',
+        energyBalance: 30,
+        gemsBalance: 0,
+        followerCount: 0,
+        followingCount: 0,
+        postCount: 0,
+        isPrivate: false,
+        isVerified: false,
+        isPremium: false,
+        isActive: true,
+        isBanned: false,
+      },
+    });
+
+    await prisma.userSubscription.create({
+      data: {
+        userId: user.id,
+        tier: 'free',
+        status: 'active',
+        features: config.subscription.tiers.free,
+      },
+    });
+
+    await prisma.userInventory.create({
+      data: {
+        userId: user.id,
+        energyBalance: 30,
+        gemsBalance: 0,
+      },
+    });
+
+    return user;
   }
 
   private sanitizeUser(user: Record<string, unknown>) {

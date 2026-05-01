@@ -9,6 +9,7 @@ import {
 import { tokenUsageTracker } from './tokenUsage.service';
 import { NotFoundError } from '../utils/errors';
 import { AICharacter, Prisma, Universe } from '@prisma/client';
+import OpenAI from 'openai';
 
 /**
  * AI Service - handles all AI content generation.
@@ -379,29 +380,56 @@ Create an engaging, original post under 280 characters.`;
     return prompts[trigger] || prompts.scheduled;
   }
 
-  /**
-   * LLM call stub - In production, replace with actual OpenAI/Anthropic API calls.
-   * Returns a mock response with realistic token counts.
-   */
+  private getOpenAIClient(): OpenAI {
+    const provider = config.ai.provider;
+    if (provider === 'nvidia') {
+      return new OpenAI({
+        apiKey: config.ai.nvidiaApiKey,
+        baseURL: config.ai.nvidiaBaseUrl,
+      });
+    }
+    return new OpenAI({
+      apiKey: config.ai.openaiApiKey,
+    });
+  }
+
   private async callLLM(
     systemPrompt: string,
     userPrompt: string,
     character: AICharacter | null
   ): Promise<AICompletionResult> {
-    // Mock response generation
+    const client = this.getOpenAIClient();
     const model = config.ai.defaultModel;
-    const promptTokens = Math.ceil((systemPrompt.length + userPrompt.length) / 4);
-    const completionTokens = Math.floor(Math.random() * 100) + 50;
+    const temperature = character
+      ? this.calculateDynamicTemperature(character, {})
+      : 0.7;
 
-    const mockContent = this.generateMockContent(character, userPrompt);
+    try {
+      const response = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature,
+        top_p: 0.7,
+        max_tokens: 1024,
+      });
 
-    return {
-      content: mockContent,
-      model,
-      promptTokens,
-      completionTokens,
-      totalTokens: promptTokens + completionTokens,
-    };
+      const choice = response.choices[0];
+      const usage = response.usage;
+
+      return {
+        content: choice?.message?.content || '',
+        model,
+        promptTokens: usage?.prompt_tokens || 0,
+        completionTokens: usage?.completion_tokens || 0,
+        totalTokens: usage?.total_tokens || 0,
+      };
+    } catch (err) {
+      console.error('LLM API call failed:', err);
+      return this.fallbackResponse(character, userPrompt);
+    }
   }
 
   private async callLLMWithMessages(
@@ -409,45 +437,57 @@ Create an engaging, original post under 280 characters.`;
     messages: { role: string; content: string }[],
     character: AICharacter
   ): Promise<AICompletionResult> {
+    const client = this.getOpenAIClient();
     const model = config.ai.defaultModel;
-    const totalText =
-      systemPrompt + messages.map((m) => m.content).join(' ');
-    const promptTokens = Math.ceil(totalText.length / 4);
-    const completionTokens = Math.floor(Math.random() * 150) + 30;
+    const temperature = this.calculateDynamicTemperature(character, {});
 
-    const mockContent = this.generateMockContent(
-      character,
-      messages[messages.length - 1]?.content || ''
-    );
-
-    return {
-      content: mockContent,
-      model,
-      promptTokens,
-      completionTokens,
-      totalTokens: promptTokens + completionTokens,
-    };
-  }
-
-  private generateMockContent(
-    character: AICharacter | null,
-    _context: string
-  ): string {
-    if (!character) {
-      return 'This is a mock AI response. Connect your OpenAI API key for real responses.';
-    }
-
-    const style = character.responseStyle as unknown as ResponseStyle;
-    const personality = character.personalityProfile as unknown as PersonalityProfile;
-
-    const templates = [
-      `Just had the most amazing ${character.interests[0]} experience! ${personality.enthusiasm > 70 ? "Can't contain my excitement!" : 'Pretty cool.'}`,
-      `Thinking about ${character.interests[Math.floor(Math.random() * character.interests.length)]} today. ${personality.curiosity > 70 ? 'Anyone else fascinated by this?' : 'Interesting stuff.'}`,
-      `${personality.humor > 70 ? 'Why did the developer quit? Because they had no arrays of hope! 😄' : `Another day, another ${character.interests[0]} adventure.`}`,
-      `${style.emojiUsage === 'frequent' ? '✨🌟 ' : ''}Sharing my thoughts on ${character.expertise[0] || character.interests[0]}${style.emojiUsage === 'frequent' ? ' 💭' : ''}`,
+    const formattedMessages: OpenAI.ChatCompletionMessageParam[] = [
+      { role: 'system', content: systemPrompt },
+      ...messages.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      })),
     ];
 
-    return templates[Math.floor(Math.random() * templates.length)];
+    try {
+      const response = await client.chat.completions.create({
+        model,
+        messages: formattedMessages,
+        temperature,
+        top_p: 0.7,
+        max_tokens: 1024,
+      });
+
+      const choice = response.choices[0];
+      const usage = response.usage;
+
+      return {
+        content: choice?.message?.content || '',
+        model,
+        promptTokens: usage?.prompt_tokens || 0,
+        completionTokens: usage?.completion_tokens || 0,
+        totalTokens: usage?.total_tokens || 0,
+      };
+    } catch (err) {
+      console.error('LLM API call failed:', err);
+      return this.fallbackResponse(character, messages[messages.length - 1]?.content || '');
+    }
+  }
+
+  private fallbackResponse(
+    character: AICharacter | null,
+    _context: string
+  ): AICompletionResult {
+    const content = character
+      ? `${character.displayName} is thinking... (AI service temporarily unavailable)`
+      : 'AI service temporarily unavailable. Please try again later.';
+    return {
+      content,
+      model: config.ai.defaultModel,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+    };
   }
 }
 

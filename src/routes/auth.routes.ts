@@ -20,11 +20,38 @@ router.post(
 );
 
 router.post(
+  '/register/firebase',
+  authLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await authService.registerWithFirebase(req.body);
+      res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.post(
   '/login',
   authLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await authService.login(req.body);
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.post(
+  '/login/firebase',
+  authLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { firebaseIdToken } = req.body;
+      const result = await authService.loginWithFirebase(firebaseIdToken);
       res.json(result);
     } catch (err) {
       next(err);
