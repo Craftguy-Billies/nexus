@@ -17,7 +17,19 @@ export default function ProfilePage() {
 
   useEffect(() => {
     feed.get('following').then((r) => setMyPosts(r.items)).catch(() => {});
-    energy.status().then(setEnergyStatus).catch(() => {});
+    energy.status().then((res) => {
+      const r = res as unknown as { energy: number; gems: number; tier: string };
+      setEnergyStatus({
+        currentEnergy: r.energy ?? 0,
+        maxEnergy: r.tier === 'pro' ? 100 : r.tier === 'premium' ? 60 : 30,
+        tier: (r.tier as 'free' | 'premium' | 'pro') ?? 'free',
+        dailyRefresh: r.tier === 'pro' ? 100 : r.tier === 'premium' ? 60 : 30,
+        nextRefreshAt: '',
+        streak: 0,
+        adsWatchedToday: 0,
+        maxAdsPerDay: 5,
+      });
+    }).catch(() => {});
   }, []);
 
   if (!user) return null;

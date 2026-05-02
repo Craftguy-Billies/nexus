@@ -61,9 +61,16 @@ export const auth = {
 
 export const feed = {
   get(tab: 'mixed' | 'following' | 'ai' | 'trending' = 'mixed', cursor?: string) {
-    const params = new URLSearchParams({ tab });
+    const routeMap: Record<string, string> = {
+      mixed: '/feed/home',
+      following: '/feed/following',
+      ai: '/feed/home',
+      trending: '/feed/discover',
+    };
+    const params = new URLSearchParams();
     if (cursor) params.set('cursor', cursor);
-    return request<PaginatedResponse<Post>>(`/feed?${params}`);
+    const qs = params.toString() ? `?${params}` : '';
+    return request<PaginatedResponse<Post>>(`${routeMap[tab] || '/feed/home'}${qs}`);
   },
 };
 
@@ -196,13 +203,13 @@ export const notifications = {
 
 export const energy = {
   status() {
-    return request<EnergyStatus>('/energy/status');
+    return request<EnergyStatus>('/energy/balance');
   },
   watchAd() {
-    return request<EnergyStatus>('/energy/rewarded-ad', { method: 'POST' });
+    return request<EnergyStatus>('/energy/claim-ad-reward', { method: 'POST' });
   },
   redeemGems(amount: number) {
-    return request<EnergyStatus>('/energy/redeem-gems', { method: 'POST', body: JSON.stringify({ amount }) });
+    return request<EnergyStatus>('/energy/claim-streak', { method: 'POST' });
   },
 };
 

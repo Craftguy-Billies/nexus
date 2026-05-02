@@ -13,7 +13,10 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    dm.conversations().then(setConversations).catch(() => {}).finally(() => setLoading(false));
+    dm.conversations()
+      .then((res) => setConversations(Array.isArray(res) ? res : (res as unknown as { items: Conversation[] }).items ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   return (
