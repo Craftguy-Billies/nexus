@@ -12,11 +12,36 @@ export class DMService {
       };
     }
 
-    const conversations = await prisma.conversation.findMany({
+    const rawConversations = await prisma.conversation.findMany({
       where,
       take: limit + 1,
       orderBy: { lastMessageAt: 'desc' },
     });
+
+    const aiCharIds = rawConversations.map((c) => c.aiCharacterId);
+    const aiChars = aiCharIds.length
+      ? await prisma.aICharacter.findMany({
+          where: { id: { in: aiCharIds } },
+          select: { id: true, username: true, displayName: true, avatar: true },
+        })
+      : [];
+    const aiMap = new Map(aiChars.map((a) => [a.id, a]));
+
+    const lastMessages = rawConversations.length
+      ? await prisma.directMessage.findMany({
+          where: { conversationId: { in: rawConversations.map((c) => c.id) } },
+          orderBy: { createdAt: 'desc' },
+          distinct: ['conversationId'],
+          select: { conversationId: true, content: true },
+        })
+      : [];
+    const msgMap = new Map(lastMessages.map((m) => [m.conversationId, m.content]));
+
+    const conversations = rawConversations.map((c) => ({
+      ...c,
+      aiCharacter: aiMap.get(c.aiCharacterId) || null,
+      lastMessage: msgMap.get(c.id) ? { content: msgMap.get(c.id) } : null,
+    }));
 
     const hasMore = conversations.length > limit;
     const items = hasMore ? conversations.slice(0, limit) : conversations;

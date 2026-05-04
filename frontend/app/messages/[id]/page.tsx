@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Send, Zap, ImageIcon } from 'lucide-react';
-import { dm, energy } from '@/lib/api';
+import { dm, energy, aiCharacters } from '@/lib/api';
 import type { DirectMessage, EnergyStatus } from '@/types';
 
 export default function DMConversationPage() {
@@ -19,11 +19,21 @@ export default function DMConversationPage() {
 
   useEffect(() => {
     if (!id) return;
+    aiCharacters.get(id).then((c) => setCharName(c.displayName)).catch(() => {});
     dm.messages(id).then((r) => {
-      setMessages(r.items);
+      const items = Array.isArray(r) ? r : (r as unknown as { items: DirectMessage[] }).items ?? [];
+      setMessages(items);
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     }).catch(() => {});
-    energy.status().then(setEnergyStatus).catch(() => {});
+    energy.status().then((res) => {
+      const r = res as unknown as { energy: number; gems: number; tier: string };
+      setEnergyStatus({
+        currentEnergy: r.energy ?? 0,
+        maxEnergy: r.tier === 'pro' ? 100 : r.tier === 'premium' ? 60 : 30,
+        tier: (r.tier as 'free' | 'premium' | 'pro') ?? 'free',
+        dailyRefresh: 30, nextRefreshAt: '', streak: 0, adsWatchedToday: 0, maxAdsPerDay: 5,
+      });
+    }).catch(() => {});
   }, [id]);
 
   const sendMessage = async () => {
@@ -43,8 +53,13 @@ export default function DMConversationPage() {
 
     setAiTyping(true);
     try {
-      const response = await dm.send(id, text);
-      setMessages((prev) => [...prev.filter((m) => m.id !== userMsg.id), userMsg, response]);
+      const raw = await dm.send(id, text) as unknown as Record<string, unknown>;
+      const realUserMsg = (raw.userMessage || raw) as DirectMessage;
+      const aiMsg = raw.aiMessage as DirectMessage | undefined;
+      const updated = [...messages.filter((m) => m.id !== userMsg.id)];
+      updated.push({ ...userMsg, id: realUserMsg.id || userMsg.id, createdAt: realUserMsg.createdAt || userMsg.createdAt });
+      if (aiMsg) updated.push({ id: aiMsg.id, conversationId: id, content: aiMsg.content, senderType: 'ai', createdAt: aiMsg.createdAt });
+      setMessages(updated);
       if (energyStatus) {
         setEnergyStatus({ ...energyStatus, currentEnergy: Math.max(0, energyStatus.currentEnergy - 1) });
       }

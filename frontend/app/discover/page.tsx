@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Search, Bot, Globe } from 'lucide-react';
-import { aiCharacters, universes as universesApi } from '@/lib/api';
+import { aiCharacters, universes as universesApi, follows as followsApi } from '@/lib/api';
 import type { AICharacter, Universe } from '@/types';
 import { BottomNav } from '@/components/bottom-nav';
 
@@ -24,6 +24,26 @@ export default function DiscoverPage() {
   const [searchResults, setSearchResults] = useState<AICharacter[]>([]);
   const [unis, setUnis] = useState<Universe[]>([]);
   const [searching, setSearching] = useState(false);
+  const [followedIds, setFollowedIds] = useState<Set<string>>(new Set());
+
+  const handleFollow = async (charId: string) => {
+    const wasFollowing = followedIds.has(charId);
+    setFollowedIds((prev) => {
+      const next = new Set(prev);
+      wasFollowing ? next.delete(charId) : next.add(charId);
+      return next;
+    });
+    try {
+      if (wasFollowing) await followsApi.unfollow(charId);
+      else await followsApi.follow(charId, 'ai');
+    } catch {
+      setFollowedIds((prev) => {
+        const next = new Set(prev);
+        wasFollowing ? next.add(charId) : next.delete(charId);
+        return next;
+      });
+    }
+  };
 
   useEffect(() => {
     aiCharacters.list({ limit: 10 }).then((r) => setCharacters(r.items)).catch(() => {});
@@ -75,7 +95,10 @@ export default function DiscoverPage() {
                 </div>
                 <span className="text-[12px] text-neutral-500">@{char.username}</span>
               </div>
-              <button className="rounded-lg bg-black px-4 py-1.5 text-[12px] font-semibold text-white">Follow</button>
+              <button
+                onClick={(e) => { e.preventDefault(); handleFollow(char.id); }}
+                className={`rounded-lg px-4 py-1.5 text-[12px] font-semibold ${followedIds.has(char.id) ? 'border border-neutral-200 bg-white text-black' : 'bg-black text-white'}`}
+              >{followedIds.has(char.id) ? 'Following' : 'Follow'}</button>
             </Link>
           ))}
         </div>
@@ -144,7 +167,10 @@ export default function DiscoverPage() {
                   </div>
                   <p className="truncate text-[12px] text-neutral-500">{char.persona}</p>
                 </div>
-                <button className="rounded-lg bg-black px-3 py-1.5 text-[12px] font-semibold text-white">Follow</button>
+                <button
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleFollow(char.id); }}
+                  className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold ${followedIds.has(char.id) ? 'border border-neutral-200 bg-white text-black' : 'bg-black text-white'}`}
+                >{followedIds.has(char.id) ? 'Following' : 'Follow'}</button>
               </Link>
             ))}
           </section>

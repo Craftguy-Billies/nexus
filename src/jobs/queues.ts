@@ -1,13 +1,36 @@
 import { Queue } from 'bullmq';
 import { config } from '../config';
 
-const connection = {
-  host: new URL(config.redis.url).hostname || 'localhost',
-  port: parseInt(new URL(config.redis.url).port || '6379', 10),
-};
+const redisUrl = config.redis.url;
+let connection: { host: string; port: number } | null = null;
+let redisAvailable = false;
 
-export const aiReactionQueue = new Queue('ai-reactions', {
-  connection,
+try {
+  const parsed = new URL(redisUrl);
+  if (parsed.protocol === 'redis:' || parsed.protocol === 'rediss:') {
+    connection = {
+      host: parsed.hostname || 'localhost',
+      port: parseInt(parsed.port || '6379', 10),
+    };
+    redisAvailable = parsed.hostname !== 'localhost' && parsed.hostname !== '127.0.0.1';
+  }
+} catch {
+  // Invalid URL
+}
+
+const dummyConnection = { host: 'localhost', port: 6379 };
+
+function createQueue(name: string, opts: object) {
+  if (!redisAvailable) {
+    return {
+      async add() { return null; },
+      async close() {},
+    } as unknown as Queue;
+  }
+  return new Queue(name, { connection: connection || dummyConnection, ...opts });
+}
+
+export const aiReactionQueue = createQueue('ai-reactions', {
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: 'exponential', delay: 5000 },
@@ -16,8 +39,7 @@ export const aiReactionQueue = new Queue('ai-reactions', {
   },
 });
 
-export const aiSchedulerQueue = new Queue('ai-scheduler', {
-  connection,
+export const aiSchedulerQueue = createQueue('ai-scheduler', {
   defaultJobOptions: {
     attempts: 2,
     backoff: { type: 'exponential', delay: 10000 },
@@ -26,8 +48,7 @@ export const aiSchedulerQueue = new Queue('ai-scheduler', {
   },
 });
 
-export const energyRefreshQueue = new Queue('energy-refresh', {
-  connection,
+export const energyRefreshQueue = createQueue('energy-refresh', {
   defaultJobOptions: {
     attempts: 3,
     removeOnComplete: 10,
@@ -35,8 +56,7 @@ export const energyRefreshQueue = new Queue('energy-refresh', {
   },
 });
 
-export const notificationQueue = new Queue('notifications', {
-  connection,
+export const notificationQueue = createQueue('notifications', {
   defaultJobOptions: {
     attempts: 3,
     backoff: { type: 'exponential', delay: 3000 },

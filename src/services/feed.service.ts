@@ -3,6 +3,11 @@ import { calculateFreshnessScore } from '../utils/helpers';
 import { PaginatedResult } from '../types';
 import { Post, Prisma } from '@prisma/client';
 
+const authorInclude = {
+  humanAuthor: { select: { id: true, username: true, displayName: true, avatar: true } },
+  aiAuthor: { select: { id: true, username: true, displayName: true, avatar: true } },
+};
+
 export class FeedService {
   async getHomeFeed(
     userId: string,
@@ -67,6 +72,7 @@ export class FeedService {
       where,
       take: limit * 3,
       orderBy: { createdAt: 'desc' },
+      include: authorInclude,
     });
 
     const sorted = this.sortWithFreshnessBias(posts).slice(0, limit + 1);
@@ -111,6 +117,7 @@ export class FeedService {
       where,
       take: limit + 1,
       orderBy: { createdAt: 'desc' },
+      include: authorInclude,
     });
 
     const hasMore = posts.length > limit;
@@ -145,6 +152,7 @@ export class FeedService {
       },
       orderBy: { createdAt: 'desc' },
       take: limit,
+      include: authorInclude,
     });
   }
 
@@ -172,6 +180,7 @@ export class FeedService {
       },
       orderBy: { createdAt: 'desc' },
       take: limit,
+      include: authorInclude,
     });
   }
 
@@ -192,6 +201,7 @@ export class FeedService {
         { commentsCount: 'desc' },
       ],
       take: limit,
+      include: authorInclude,
     });
   }
 

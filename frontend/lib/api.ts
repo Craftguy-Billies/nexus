@@ -93,10 +93,7 @@ export const posts = {
     return request<void>(`/posts/${postId}/like`, { method: 'POST' });
   },
   unlike(postId: string) {
-    return request<void>(`/posts/${postId}/unlike`, { method: 'DELETE' });
-  },
-  bookmark(postId: string) {
-    return request<void>(`/posts/${postId}/bookmark`, { method: 'POST' });
+    return request<void>(`/posts/${postId}/like`, { method: 'DELETE' });
   },
 };
 
@@ -107,7 +104,7 @@ export const users = {
     return request<User>(`/users/${id}`);
   },
   update(data: Partial<{ displayName: string; bio: string; avatarUrl: string }>) {
-    return request<User>('/users/me', { method: 'PATCH', body: JSON.stringify(data) });
+    return request<User>('/users/profile', { method: 'PUT', body: JSON.stringify(data) });
   },
   search(q: string) {
     return request<{ items: User[] }>(`/users/search?q=${encodeURIComponent(q)}`);
@@ -117,17 +114,20 @@ export const users = {
 // ─── Follows ───────────────────────────────────────────────
 
 export const follows = {
-  follow(userId: string) {
-    return request<void>(`/follow/${userId}/follow`, { method: 'POST' });
+  follow(userId: string, followingType: string = 'human') {
+    return request<void>(`/follow/${userId}`, { method: 'POST', body: JSON.stringify({ followingType }) });
   },
   unfollow(userId: string) {
-    return request<void>(`/follow/${userId}/unfollow`, { method: 'DELETE' });
+    return request<void>(`/follow/${userId}`, { method: 'DELETE' });
+  },
+  check(targetId: string) {
+    return request<{ isFollowing: boolean }>(`/follow/check/${targetId}`);
   },
   followers(userId: string) {
-    return request<PaginatedResponse<User>>(`/follow/${userId}/followers`);
+    return request<PaginatedResponse<User>>(`/users/${userId}/followers`);
   },
   following(userId: string) {
-    return request<PaginatedResponse<User>>(`/follow/${userId}/following`);
+    return request<PaginatedResponse<User>>(`/users/${userId}/following`);
   },
 };
 
@@ -167,20 +167,14 @@ export const dm = {
   conversations() {
     return request<Conversation[]>('/dm/conversations');
   },
-  messages(conversationId: string, cursor?: string) {
+  messages(aiCharacterId: string, cursor?: string) {
     const params = cursor ? `?cursor=${cursor}` : '';
-    return request<PaginatedResponse<DirectMessage>>(`/dm/conversations/${conversationId}/messages${params}`);
+    return request<PaginatedResponse<DirectMessage>>(`/dm/messages/${aiCharacterId}${params}`);
   },
-  send(conversationId: string, content: string) {
-    return request<DirectMessage>(`/dm/conversations/${conversationId}/messages`, {
+  send(aiCharacterId: string, content: string) {
+    return request<DirectMessage>(`/dm/send/${aiCharacterId}`, {
       method: 'POST',
       body: JSON.stringify({ content }),
-    });
-  },
-  startConversation(aiCharacterId: string) {
-    return request<Conversation>('/dm/conversations', {
-      method: 'POST',
-      body: JSON.stringify({ aiCharacterId }),
     });
   },
 };
@@ -192,10 +186,10 @@ export const notifications = {
     return request<PaginatedResponse<Notification>>('/notifications');
   },
   markRead(id: string) {
-    return request<void>(`/notifications/${id}/read`, { method: 'PATCH' });
+    return request<void>(`/notifications/${id}/read`, { method: 'PUT' });
   },
   markAllRead() {
-    return request<void>('/notifications/read-all', { method: 'PATCH' });
+    return request<void>('/notifications/read-all', { method: 'PUT' });
   },
 };
 
@@ -217,7 +211,7 @@ export const energy = {
 
 export const subscriptions = {
   status() {
-    return request<SubscriptionStatus>('/subscriptions/status');
+    return request<SubscriptionStatus>('/subscriptions');
   },
 };
 

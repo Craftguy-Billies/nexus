@@ -18,7 +18,10 @@ export default function PostDetailPage() {
   useEffect(() => {
     if (!id) return;
     postsApi.get(id).then(setPost).catch(() => {});
-    postsApi.getComments(id).then((res) => setComments(res.items)).catch(() => {});
+    postsApi.getComments(id).then((res) => {
+      const r = res as unknown as { items: Comment[] };
+      setComments(r.items || []);
+    }).catch(() => {});
   }, [id]);
 
   const submitComment = async () => {
@@ -43,8 +46,9 @@ export default function PostDetailPage() {
     );
   }
 
-  const author = post.aiCharacter || post.author;
-  const isAI = !!post.aiCharacter;
+  const raw = post as Record<string, unknown>;
+  const author = (raw.aiAuthor || raw.aiCharacter || raw.humanAuthor || raw.author) as { displayName?: string; username?: string; avatar?: string; avatarUrl?: string } | undefined;
+  const isAI = post.authorType === 'ai' || !!raw.aiCharacter || !!raw.aiAuthor;
 
   return (
     <div className="flex min-h-screen flex-col pb-20">
@@ -58,8 +62,8 @@ export default function PostDetailPage() {
       <div className="px-4 py-3">
         <div className="mb-3 flex items-center gap-2.5">
           <div className="h-10 w-10 overflow-hidden rounded-full bg-neutral-200">
-            {author?.avatarUrl ? (
-              <Image src={author.avatarUrl} alt="" width={40} height={40} className="h-full w-full object-cover" />
+            {(author?.avatar || author?.avatarUrl) ? (
+              <Image src={(author.avatar || author.avatarUrl)!} alt="" width={40} height={40} className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-[14px] font-semibold text-neutral-500">
                 {author?.displayName?.charAt(0) || '?'}

@@ -16,11 +16,13 @@ export function FeedPost({ post }: FeedPostProps) {
   const [likeCount, setLikeCount] = useState(post._count?.likes || 0);
   const [bookmarked, setBookmarked] = useState(post.isBookmarked || false);
 
-  const author = post.aiCharacter || post.author;
-  const isAI = !!post.aiCharacter;
-  const displayName = author?.displayName || 'Unknown';
-  const username = author?.username || 'unknown';
-  const avatarUrl = author?.avatarUrl;
+  const raw = post as Record<string, unknown>;
+  const author = raw.aiAuthor || raw.aiCharacter || raw.humanAuthor || raw.author;
+  const authorObj = author as { displayName?: string; username?: string; avatar?: string; avatarUrl?: string } | undefined;
+  const isAI = post.authorType === 'ai' || !!raw.aiCharacter || !!raw.aiAuthor;
+  const displayName = authorObj?.displayName || 'Unknown';
+  const username = authorObj?.username || 'unknown';
+  const avatarUrl = authorObj?.avatar || authorObj?.avatarUrl;
 
   const toggleLike = async () => {
     const next = !liked;
@@ -38,7 +40,7 @@ export function FeedPost({ post }: FeedPostProps) {
   return (
     <article className="border-b border-neutral-200">
       <div className="flex items-center justify-between px-3 py-2.5">
-        <Link href={isAI ? `/profile/${post.aiCharacterId}` : `/profile/${post.authorId}`} className="flex items-center gap-2.5">
+        <Link href={`/profile/${post.authorId}`} className="flex items-center gap-2.5">
           <div className="h-8 w-8 overflow-hidden rounded-full bg-neutral-200 ring-1 ring-neutral-200">
             {avatarUrl ? (
               <Image src={avatarUrl} alt={displayName} width={32} height={32} className="h-full w-full object-cover" />

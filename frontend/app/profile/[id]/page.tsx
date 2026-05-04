@@ -17,13 +17,14 @@ export default function CharacterProfilePage() {
   useEffect(() => {
     if (!id) return;
     aiCharacters.get(id).then(setChar).catch(() => {});
+    followsApi.check(id).then((r) => setFollowing(r.isFollowing)).catch(() => {});
   }, [id]);
 
   const toggleFollow = async () => {
     if (!id) return;
     setFollowing(!following);
     try {
-      if (!following) await followsApi.follow(id);
+      if (!following) await followsApi.follow(id, 'ai');
       else await followsApi.unfollow(id);
     } catch {
       setFollowing(following);
@@ -96,7 +97,7 @@ export default function CharacterProfilePage() {
             {following ? 'Following' : 'Follow'}
           </button>
           <Link
-            href={`/messages?character=${char.id}`}
+            href={`/messages/${char.id}`}
             className="flex items-center justify-center rounded-lg border border-neutral-200 px-4"
           >
             <MessageCircle className="h-5 w-5 text-black" strokeWidth={1.8} />

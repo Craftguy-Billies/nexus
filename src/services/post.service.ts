@@ -114,6 +114,8 @@ export class PostService {
     const post = await prisma.post.findUnique({
       where: { id: postId },
       include: {
+        humanAuthor: { select: { id: true, username: true, displayName: true, avatar: true } },
+        aiAuthor: { select: { id: true, username: true, displayName: true, avatar: true } },
         comments: {
           where: { parentId: null },
           take: 20,

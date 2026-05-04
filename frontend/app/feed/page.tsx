@@ -27,10 +27,11 @@ export default function FeedPage() {
   const loadPosts = useCallback(async (tab: FeedTab, reset = false) => {
     setLoading(true);
     try {
-      const res = await feed.get(tab, reset ? undefined : cursor);
-      setPosts((prev) => (reset ? res.items : [...prev, ...res.items]));
-      setCursor(res.nextCursor);
-      setHasMore(res.hasMore);
+      const raw = await feed.get(tab, reset ? undefined : cursor);
+      const res = raw as unknown as { items: Post[]; nextToken?: string | null; nextCursor?: string; hasMore?: boolean };
+      setPosts((prev) => (reset ? (res.items || []) : [...prev, ...(res.items || [])]));
+      setCursor(res.nextCursor || res.nextToken || undefined);
+      setHasMore(res.hasMore ?? !!res.nextToken);
     } catch {
       // silently handle
     } finally {
