@@ -51,6 +51,16 @@ export async function createApp() {
       timestamp: new Date().toISOString(),
       version: '1.0.0',
       service: 'nexus-ai-backend',
+      config: {
+        env: config.env,
+        aiProvider: config.ai.provider,
+        aiModel: config.ai.defaultModel,
+      },
+      dependencies: {
+        databaseConfigured: Boolean(config.database.url),
+        redisConfigured: Boolean(config.redis.url),
+        firebaseConfigured: Boolean(config.firebase.serviceAccountBase64),
+      },
     });
   });
 

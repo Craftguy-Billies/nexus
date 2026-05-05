@@ -9,11 +9,7 @@ import { followService } from '../services/follow.service';
 import { tokenUsageTracker } from '../services/tokenUsage.service';
 import { notificationService } from '../services/notification.service';
 import { ActivitySchedule } from '../types';
-
-const connection = {
-  host: new URL(config.redis.url).hostname || 'localhost',
-  port: parseInt(new URL(config.redis.url).port || '6379', 10),
-};
+import { getRedis, isRedisConfigured } from '../config/redis';
 
 /**
  * AI Reaction Worker
@@ -108,7 +104,7 @@ export function startAIReactionWorker() {
         await aiService.updateRelationship(character.id, userId, 'positive');
       }
     },
-    { connection, concurrency: 5 }
+    { connection: getRedis(), concurrency: 5 }
   );
 
   worker.on('completed', (job) => {
@@ -233,7 +229,7 @@ export function startAISchedulerWorker() {
         }
       }
     },
-    { connection, concurrency: 1 }
+    { connection: getRedis(), concurrency: 1 }
   );
 
   worker.on('completed', (job) => {
@@ -251,6 +247,11 @@ export function startAISchedulerWorker() {
  * Start all workers
  */
 export function startAllWorkers() {
+  if (!isRedisConfigured()) {
+    console.warn('REDIS_URL not configured — BullMQ workers disabled');
+    return null;
+  }
+
   try {
     const reactionWorker = startAIReactionWorker();
     const schedulerWorker = startAISchedulerWorker();

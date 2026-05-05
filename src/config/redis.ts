@@ -3,7 +3,15 @@ import { config } from './index';
 
 let redis: Redis | null = null;
 
+export function isRedisConfigured(): boolean {
+  return Boolean(config.redis.url);
+}
+
 export function getRedis(): Redis {
+  if (!config.redis.url) {
+    throw new Error('REDIS_URL is not configured');
+  }
+
   if (!redis) {
     redis = new Redis(config.redis.url, {
       maxRetriesPerRequest: null,

@@ -6,11 +6,11 @@ export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
 
   database: {
-    url: process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/nexusai',
+    url: process.env.DATABASE_URL || '',
   },
 
   redis: {
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
+    url: process.env.REDIS_URL || '',
   },
 
   jwt: {
@@ -46,6 +46,10 @@ export const config = {
 
   revenueCat: {
     webhookSecret: process.env.REVENUECAT_WEBHOOK_SECRET || '',
+  },
+
+  flags: {
+    allowStartWithoutDb: process.env.ALLOW_START_WITHOUT_DB === 'true',
   },
 
   energy: {

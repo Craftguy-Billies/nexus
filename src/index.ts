@@ -4,9 +4,24 @@ import prisma from './config/database';
 
 async function main() {
   try {
-    // Test database connection
-    await prisma.$connect();
-    console.log('Database connected');
+    // Test database connection (required unless explicitly allowed to start without DB)
+    if (!config.database.url) {
+      if (!config.flags.allowStartWithoutDb) {
+        throw new Error('DATABASE_URL is required (or set ALLOW_START_WITHOUT_DB=true)');
+      }
+      console.warn('DATABASE_URL not configured — starting without database connection');
+    } else {
+      try {
+        await prisma.$connect();
+        console.log('Database connected');
+      } catch (err) {
+        if (!config.flags.allowStartWithoutDb) throw err;
+        console.warn(
+          'Database connection failed — starting without database connection:',
+          (err as Error).message
+        );
+      }
+    }
 
     const { httpServer } = await createApp();
 

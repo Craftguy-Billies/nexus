@@ -1,33 +1,14 @@
 import { Queue } from 'bullmq';
-import { config } from '../config';
-
-const redisUrl = config.redis.url;
-let connection: { host: string; port: number } | null = null;
-let redisAvailable = false;
-
-try {
-  const parsed = new URL(redisUrl);
-  if (parsed.protocol === 'redis:' || parsed.protocol === 'rediss:') {
-    connection = {
-      host: parsed.hostname || 'localhost',
-      port: parseInt(parsed.port || '6379', 10),
-    };
-    redisAvailable = parsed.hostname !== 'localhost' && parsed.hostname !== '127.0.0.1';
-  }
-} catch {
-  // Invalid URL
-}
-
-const dummyConnection = { host: 'localhost', port: 6379 };
+import { getRedis, isRedisConfigured } from '../config/redis';
 
 function createQueue(name: string, opts: object) {
-  if (!redisAvailable) {
+  if (!isRedisConfigured()) {
     return {
       async add() { return null; },
       async close() {},
     } as unknown as Queue;
   }
-  return new Queue(name, { connection: connection || dummyConnection, ...opts });
+  return new Queue(name, { connection: getRedis(), ...opts });
 }
 
 export const aiReactionQueue = createQueue('ai-reactions', {
