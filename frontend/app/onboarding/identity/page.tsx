@@ -29,7 +29,7 @@ export default function OnboardingIdentity() {
     }
   };
 
-  const isValid = usernameValid === true && displayName.length > 0 && email.includes('@') && password.length >= 6;
+  const isValid = usernameValid === true && displayName.length > 0 && email.includes('@') && password.length >= 8;
 
   const handleSubmit = async () => {
     if (!isValid) return;
@@ -132,7 +132,7 @@ export default function OnboardingIdentity() {
               type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 6 characters"
+              placeholder="At least 8 characters"
               className="w-full rounded-lg border border-neutral-200 py-2.5 px-3 pr-10 text-[14px] text-black outline-none focus:border-black"
             />
             <button
