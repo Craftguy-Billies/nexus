@@ -13,7 +13,9 @@ datasource db {
 model User {
   id          String   @id @default(uuid())
   firebaseUid String   @unique @map("firebase_uid")
-  username    String   @unique
+  // username is a display handle — duplicates are allowed.
+  // email/firebaseUid are the true unique identifiers.
+  username    String
   email       String   @unique
   displayName String   @map("display_name")
   bio         String?
@@ -63,6 +65,7 @@ model User {
   tokenUsages   TokenUsage[]       @relation("triggeredBy")
   admins        Admin[]
 
+  @@index([username])
   @@map("users")
 }
 
@@ -288,24 +291,21 @@ model UserSubscription {
   revenueCatCustomerId    String? @map("revenuecat_customer_id")
   revenueCatEntitlementId String? @map("revenuecat_entitlement_id")
 
-  startedAt   DateTime  @default(now()) @map("started_at")
-  expiresAt   DateTime? @map("expires_at")
-  cancelledAt DateTime? @map("cancelled_at")
-  willRenew   Boolean   @default(false) @map("will_renew")
+  currentPeriodStart DateTime? @map("current_period_start")
+  currentPeriodEnd   DateTime? @map("current_period_end")
 
-  // Feature flags stored as JSON
-  features Json @default("{}")
+  features Json
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_subscriptions")
 }
 
 // ============================================================
-// User Inventory (Virtual Economy)
+// User Inventory
 // ============================================================
 model UserInventory {
   id     String @id @default(uuid())
@@ -314,94 +314,18 @@ model UserInventory {
   energyBalance Int @default(30) @map("energy_balance")
   gemsBalance   Int @default(0) @map("gems_balance")
 
-  // Items stored as JSON array
-  items Json @default("[]")
-
-  currentStreak  Int      @default(0) @map("current_streak")
-  longestStreak  Int      @default(0) @map("longest_streak")
-  lastStreakDate DateTime @default(now()) @map("last_streak_date")
-
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id])
-
-  @@map("user_inventories")
-}
-
-// ============================================================
-// Universe (Fan Circle / World)
-// ============================================================
-model Universe {
-  id          String @id @default(uuid())
-  name        String @unique
-  description String
-  coverImage  String @map("cover_image")
-
-  lore  String
-  rules String[]
-
-  memberCount     Int   @default(0) @map("member_count")
-  aiCharacterCount Int  @default(0) @map("ai_character_count")
-  postCount       Int   @default(0) @map("post_count")
-  trendingScore   Float @default(0) @map("trending_score")
-
-  isOfficial Boolean @default(false) @map("is_official")
-  creatorId  String  @map("creator_id")
-  tags       String[]
+  lastEnergyRefreshAt DateTime @default(now()) @map("last_energy_refresh_at")
+  dailyStreakDays      Int      @default(0) @map("daily_streak_days")
+  lastStreakClaimAt    DateTime? @map("last_streak_claim_at")
+  adsWatchedToday      Int      @default(0) @map("ads_watched_today")
+  lastAdWatchAt        DateTime? @map("last_ad_watch_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  aiCharacters AICharacter[]
-  scenarios    Scenario[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("universes")
-}
-
-// ============================================================
-// Scenario (Multiplayer)
-// ============================================================
-model Scenario {
-  id          String @id @default(uuid())
-  title       String
-  description String
-  coverImage  String @map("cover_image")
-
-  universeId String? @map("universe_id")
-  creatorId  String  @map("creator_id")
-
-  maxHumanPlayers Int      @default(1) @map("max_human_players")
-  currentPlayers  String[] @map("current_players")
-
-  isPublic Boolean @default(true) @map("is_public")
-  isActive Boolean @default(true) @map("is_active")
-
-  sceneSetting String @map("scene_setting")
-  plotPoints   Json   @default("[]") @map("plot_points")
-
-  likesCount Int @default(0) @map("likes_count")
-  playCount  Int @default(0) @map("play_count")
-
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  lastPlayedAt DateTime? @map("last_played_at")
-
-  universe   Universe? @relation(fields: [universeId], references: [id])
-  characters ScenarioCharacter[]
-
-  @@map("scenarios")
-}
-
-model ScenarioCharacter {
-  id            String @id @default(uuid())
-  scenarioId    String @map("scenario_id")
-  aiCharacterId String @map("ai_character_id")
-
-  scenario    Scenario    @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
-  aiCharacter AICharacter @relation(fields: [aiCharacterId], references: [id])
-
-  @@unique([scenarioId, aiCharacterId])
-  @@map("scenario_characters")
+  @@map("user_inventories")
 }
 
 // ============================================================
@@ -411,16 +335,16 @@ model Notification {
   id     String @id @default(uuid())
   userId String @map("user_id")
 
-  type    NotificationType
-  title   String
-  body    String
-  data    Json?
+  type  String
+  title String
+  body  String
 
+  data   Json?
   isRead Boolean @default(false) @map("is_read")
 
   createdAt DateTime @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
   @@index([createdAt])
@@ -428,71 +352,78 @@ model Notification {
 }
 
 // ============================================================
-// Admin
+// Universe
 // ============================================================
-model Admin {
-  id     String @id @default(uuid())
-  userId String @map("user_id")
+model Universe {
+  id          String @id @default(uuid())
+  name        String @unique
+  description String
+  coverImage  String? @map("cover_image")
+  lore        String
+  rules       String[]
+  isPublic    Boolean @default(true) @map("is_public")
+  createdBy   String  @map("created_by")
 
-  role        AdminRole
-  permissions String[]
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id])
-
-  @@unique([userId])
-  @@map("admins")
-}
-
-// ============================================================
-// Offline Queue (for sync)
-// ============================================================
-model OfflineAction {
-  id         String @id @default(uuid())
-  userId     String @map("user_id")
-  actionType String @map("action_type")
-  actionData Json   @map("action_data")
-  priority   Int    @default(5)
-  status     String @default("pending")
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@index([userId, status])
-  @@map("offline_actions")
-}
-
-// ============================================================
-// Direct Message (DM) for AI chat
-// ============================================================
-model DirectMessage {
-  id              String @id @default(uuid())
-  conversationId  String @map("conversation_id")
-  senderId        String @map("sender_id")
-  senderType      AuthorType @map("sender_type")
-  content         String
-  
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@index([conversationId, createdAt])
-  @@map("direct_messages")
-}
-
-model Conversation {
-  id            String @id @default(uuid())
-  userId        String @map("user_id")
-  aiCharacterId String @map("ai_character_id")
-  
-  lastMessageAt DateTime? @map("last_message_at")
-  messageSummary String?  @map("message_summary")
-  messageCount   Int      @default(0) @map("message_count")
-  
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@unique([userId, aiCharacterId])
-  @@index([userId])
-  @@map("conversations")
+  characters AICharacter[]
+  scenarios  Scenario[]
+
+  @@map("universes")
+}
+
+// ============================================================
+// Scenario
+// ============================================================
+model Scenario {
+  id          String @id @default(uuid())
+  title       String
+  description String
+  coverImage  String? @map("cover_image")
+
+  sceneSetting    String @map("scene_setting")
+  universeId      String? @map("universe_id")
+  maxParticipants Int    @default(1) @map("max_participants")
+  energyCost      Int    @default(5) @map("energy_cost")
+  isActive        Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  universe   Universe? @relation(fields: [universeId], references: [id])
+  characters ScenarioCharacter[]
+
+  @@map("scenarios")
+}
+
+// ============================================================
+// Scenario Character (join table)
+// ============================================================
+model ScenarioCharacter {
+  id          String @id @default(uuid())
+  scenarioId  String @map("scenario_id")
+  characterId String @map("character_id")
+
+  scenario  Scenario    @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  character AICharacter @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([scenarioId, characterId])
+  @@map("scenario_characters")
+}
+
+// ============================================================
+// Admin
+// ============================================================
+model Admin {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  permissions String[]
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admins")
 }
 
 // ============================================================
@@ -503,17 +434,9 @@ enum AuthorType {
   ai
 }
 
-enum SubscriptionTier {
-  free
-  premium
-  pro
-}
-
-enum SubscriptionStatus {
+enum FollowStatus {
   active
-  cancelled
-  expired
-  grace_period
+  blocked
 }
 
 enum ModerationStatus {
@@ -523,24 +446,15 @@ enum ModerationStatus {
   flagged
 }
 
-enum FollowStatus {
+enum SubscriptionTier {
+  free
+  premium
+  pro
+}
+
+enum SubscriptionStatus {
   active
-  pending
-  blocked
-}
-
-enum NotificationType {
-  new_follower
-  new_like
-  new_comment
-  ai_interaction
-  system_alert
-  energy_refill
-  streak_reward
-}
-
-enum AdminRole {
-  super_admin
-  moderator
-  support
+  expired
+  cancelled
+  trial
 }

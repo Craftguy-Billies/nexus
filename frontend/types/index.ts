@@ -178,6 +178,8 @@ export interface AuthResponse {
   user: User;
   token: string;
   refreshToken: string;
+  /** True when this is the first time the user has authenticated (no DB profile yet). */
+  isNewUser?: boolean;
 }
 
 export interface PaginatedResponse<T> {

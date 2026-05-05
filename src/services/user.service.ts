@@ -14,9 +14,11 @@ export class UserService {
   }
 
   async getUserByUsername(username: string) {
-    const user = await prisma.user.findUnique({
+    // username is no longer unique — return the first match (most followed)
+    const user = await prisma.user.findFirst({
       where: { username: username.toLowerCase() },
       include: { subscription: true },
+      orderBy: { followerCount: 'desc' },
     });
     if (!user) throw new NotFoundError('User not found');
     return user;

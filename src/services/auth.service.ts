@@ -14,8 +14,10 @@ import * as admin from 'firebase-admin';
 
 export class AuthService {
   /**
-   * Register with Firebase ID token (from mobile app).
-   * The client signs up via Firebase Auth SDK, then sends the idToken here.
+   * Register / complete onboarding with Firebase ID token.
+   * The client signs in via Firebase Auth SDK (email or Google),
+   * then sends the idToken + chosen handle + display name here.
+   * Email is used as the primary key; duplicate usernames are allowed.
    */
   async registerWithFirebase(input: {
     firebaseIdToken: string;
@@ -38,20 +40,17 @@ export class AuthService {
     const firebaseUid = decoded.uid;
     const email = decoded.email || '';
 
+    // If a DB record already exists for this Firebase UID, just return it
     const existingByUid = await prisma.user.findUnique({
       where: { firebaseUid },
     });
     if (existingByUid) {
-      throw new ConflictError('Firebase account already registered');
+      const token = this.generateAccessToken(existingByUid.id, firebaseUid);
+      const refreshToken = this.generateRefreshToken(existingByUid.id, firebaseUid);
+      return { user: this.sanitizeUser(existingByUid), token, refreshToken, isNewUser: false };
     }
 
-    const existingByUsername = await prisma.user.findUnique({
-      where: { username },
-    });
-    if (existingByUsername) {
-      throw new ConflictError('Username already taken');
-    }
-
+    // Email uniqueness is still enforced (one account per email)
     if (email) {
       const existingByEmail = await prisma.user.findUnique({
         where: { email },
@@ -61,61 +60,18 @@ export class AuthService {
       }
     }
 
+    // Usernames are NOT unique — no duplicate check needed
     const user = await this.createUserRecord(firebaseUid, email, username, input.displayName);
     const token = this.generateAccessToken(user.id, firebaseUid);
     const refreshToken = this.generateRefreshToken(user.id, firebaseUid);
 
-    return { user: this.sanitizeUser(user), token, refreshToken };
+    return { user: this.sanitizeUser(user), token, refreshToken, isNewUser: true };
   }
 
   /**
-   * Local register (email+password) — for dev/testing without Firebase client SDK.
-   */
-  async register(input: {
-    email: string;
-    password: string;
-    username: string;
-    displayName: string;
-  }) {
-    if (!input.email || !input.password || !input.username || !input.displayName) {
-      throw new ValidationError('All fields are required');
-    }
-
-    const username = input.username.toLowerCase();
-    this.validateUsername(username);
-
-    if (input.password.length < 8) {
-      throw new ValidationError('Password must be at least 8 characters');
-    }
-
-    const existingUser = await prisma.user.findFirst({
-      where: { OR: [{ username }, { email: input.email }] },
-    });
-
-    if (existingUser) {
-      throw new ConflictError(
-        existingUser.username === username
-          ? 'Username already taken'
-          : 'Email already registered'
-      );
-    }
-
-    const passwordHash = await bcrypt.hash(input.password, 12);
-    const firebaseUid = `local_${Buffer.from(passwordHash).toString('base64').slice(0, 28)}`;
-
-    const user = await this.createUserRecord(firebaseUid, input.email, username, input.displayName);
-    const token = this.generateAccessToken(user.id, firebaseUid);
-    const refreshToken = this.generateRefreshToken(user.id, firebaseUid);
-
-    return {
-      user: this.sanitizeUser(user),
-      token,
-      refreshToken,
-    };
-  }
-
-  /**
-   * Login with Firebase ID token (from mobile app).
+   * Login with Firebase ID token (Google or email/password via Firebase).
+   * Returns isNewUser=true when no DB record exists yet so the client
+   * knows to redirect to the handle-creation screen.
    */
   async loginWithFirebase(firebaseIdToken: string) {
     const app = getFirebaseAdmin();
@@ -128,6 +84,7 @@ export class AuthService {
       where: { firebaseUid: decoded.uid },
     });
 
+    // No DB record yet → tell the client this is a new user
     if (!user) {
       throw new NotFoundError('No account found for this Firebase user. Please register first.');
     }
@@ -144,7 +101,51 @@ export class AuthService {
     const token = this.generateAccessToken(user.id, user.firebaseUid);
     const refreshToken = this.generateRefreshToken(user.id, user.firebaseUid);
 
-    return { user: this.sanitizeUser(user), token, refreshToken };
+    return { user: this.sanitizeUser(user), token, refreshToken, isNewUser: false };
+  }
+
+  /**
+   * Local register (email+password) — kept for dev/testing without Firebase client SDK.
+   * Duplicate usernames are allowed; email is the unique identifier.
+   */
+  async register(input: {
+    email: string;
+    password: string;
+    username: string;
+    displayName: string;
+  }) {
+    if (!input.email || !input.password || !input.username || !input.displayName) {
+      throw new ValidationError('All fields are required');
+    }
+
+    const username = input.username.toLowerCase();
+    this.validateUsername(username);
+
+    if (input.password.length < 6) {
+      throw new ValidationError('Password must be at least 6 characters');
+    }
+
+    // Only check email uniqueness — username duplicates are allowed
+    const existingByEmail = await prisma.user.findUnique({
+      where: { email: input.email },
+    });
+    if (existingByEmail) {
+      throw new ConflictError('Email already registered');
+    }
+
+    const passwordHash = await bcrypt.hash(input.password, 12);
+    const firebaseUid = `local_${Buffer.from(passwordHash).toString('base64').slice(0, 28)}`;
+
+    const user = await this.createUserRecord(firebaseUid, input.email, username, input.displayName);
+    const token = this.generateAccessToken(user.id, firebaseUid);
+    const refreshToken = this.generateRefreshToken(user.id, firebaseUid);
+
+    return {
+      user: this.sanitizeUser(user),
+      token,
+      refreshToken,
+      isNewUser: true,
+    };
   }
 
   /**
@@ -175,6 +176,7 @@ export class AuthService {
       user: this.sanitizeUser(user),
       token,
       refreshToken,
+      isNewUser: false,
     };
   }
 

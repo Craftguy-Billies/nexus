@@ -5,14 +5,19 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 
 export default function Page() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isNewUser, firebaseUser, isLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading) {
-      router.replace(isAuthenticated ? '/feed' : '/onboarding');
+    if (isLoading) return;
+    if (isAuthenticated && !isNewUser) {
+      router.replace('/feed');
+    } else if (firebaseUser && isNewUser) {
+      router.replace('/onboarding/handle');
+    } else {
+      router.replace('/onboarding');
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isNewUser, firebaseUser, isLoading, router]);
 
   return (
     <div className="flex min-h-screen items-center justify-center">

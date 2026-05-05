@@ -1,17 +1,43 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  type ReactNode,
+} from 'react';
+import {
+  firebaseAuth,
+  googleProvider,
+  signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  type FirebaseUser,
+} from '@/lib/firebase';
 import { auth as authApi } from '@/lib/api';
 import type { User } from '@/types';
 
 interface AuthContextType {
   user: User | null;
+  firebaseUser: FirebaseUser | null;
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, username: string, displayName: string) => Promise<void>;
-  logout: () => void;
+  /** true if this is the very first time the user has logged in (needs handle setup) */
+  isNewUser: boolean;
+  /** Sign in with Google popup. Returns isNewUser flag. */
+  loginWithGoogle: () => Promise<{ isNewUser: boolean }>;
+  /** Sign in with email + password via Firebase. Returns isNewUser flag. */
+  loginWithEmail: (email: string, password: string) => Promise<{ isNewUser: boolean }>;
+  /** Create a new Firebase email account. Returns isNewUser flag (always true). */
+  registerWithEmail: (email: string, password: string) => Promise<{ isNewUser: boolean }>;
+  /** Complete onboarding: set handle + display name for a new Firebase user. */
+  completeOnboarding: (username: string, displayName: string) => Promise<void>;
+  logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
@@ -19,8 +45,10 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isNewUser, setIsNewUser] = useState(false);
 
   const refreshUser = useCallback(async () => {
     try {
@@ -33,45 +61,139 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Listen for Firebase auth state changes (handles page refresh / session persistence)
   useEffect(() => {
-    const savedToken = localStorage.getItem('nexus_token');
-    if (savedToken) {
-      setToken(savedToken);
-      refreshUser().finally(() => setIsLoading(false));
-    } else {
+    const unsubscribe = onAuthStateChanged(firebaseAuth, async (fbUser) => {
+      setFirebaseUser(fbUser);
+
+      if (fbUser) {
+        // Try to restore session from localStorage first
+        const savedToken = localStorage.getItem('nexus_token');
+        if (savedToken) {
+          setToken(savedToken);
+          try {
+            const me = await authApi.me();
+            setUser(me);
+          } catch {
+            // Token expired — try to exchange a fresh Firebase token
+            try {
+              const idToken = await fbUser.getIdToken(true);
+              const res = await authApi.loginFirebase(idToken);
+              localStorage.setItem('nexus_token', res.token);
+              setToken(res.token);
+              setUser(res.user);
+              setIsNewUser((res as { isNewUser?: boolean }).isNewUser ?? false);
+            } catch {
+              // User doesn't exist in DB yet (new user) — leave user as null
+              setUser(null);
+              setToken(null);
+              localStorage.removeItem('nexus_token');
+            }
+          }
+        }
+      } else {
+        // Signed out
+        setUser(null);
+        setToken(null);
+        setIsNewUser(false);
+        localStorage.removeItem('nexus_token');
+      }
+
       setIsLoading(false);
-    }
-  }, [refreshUser]);
+    });
 
-  const login = async (email: string, password: string) => {
-    const res = await authApi.login({ email, password });
-    localStorage.setItem('nexus_token', res.token);
-    setToken(res.token);
-    setUser(res.user);
-  };
+    return () => unsubscribe();
+  }, []);
 
-  const register = async (email: string, password: string, username: string, displayName: string) => {
-    const res = await authApi.register({ email, password, username, displayName });
-    localStorage.setItem('nexus_token', res.token);
-    setToken(res.token);
-    setUser(res.user);
-  };
+  /**
+   * Internal helper: after Firebase sign-in, exchange the ID token with the backend.
+   * Returns whether this is a brand-new user who needs to complete onboarding.
+   */
+  const exchangeFirebaseToken = useCallback(
+    async (fbUser: FirebaseUser): Promise<{ isNewUser: boolean }> => {
+      const idToken = await fbUser.getIdToken();
+      try {
+        const res = await authApi.loginFirebase(idToken);
+        localStorage.setItem('nexus_token', res.token);
+        setToken(res.token);
+        setUser(res.user);
+        const newUser = (res as { isNewUser?: boolean }).isNewUser ?? false;
+        setIsNewUser(newUser);
+        return { isNewUser: newUser };
+      } catch (err: unknown) {
+        // 404 means the Firebase account exists but no DB record yet → new user
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes('404') || message.includes('not found') || message.includes('register')) {
+          setIsNewUser(true);
+          return { isNewUser: true };
+        }
+        throw err;
+      }
+    },
+    []
+  );
 
-  const logout = () => {
+  const loginWithGoogle = useCallback(async (): Promise<{ isNewUser: boolean }> => {
+    const result = await signInWithPopup(firebaseAuth, googleProvider);
+    setFirebaseUser(result.user);
+    return exchangeFirebaseToken(result.user);
+  }, [exchangeFirebaseToken]);
+
+  const loginWithEmail = useCallback(
+    async (email: string, password: string): Promise<{ isNewUser: boolean }> => {
+      const result = await signInWithEmailAndPassword(firebaseAuth, email, password);
+      setFirebaseUser(result.user);
+      return exchangeFirebaseToken(result.user);
+    },
+    [exchangeFirebaseToken]
+  );
+
+  const registerWithEmail = useCallback(
+    async (email: string, password: string): Promise<{ isNewUser: boolean }> => {
+      const result = await createUserWithEmailAndPassword(firebaseAuth, email, password);
+      setFirebaseUser(result.user);
+      // Brand-new Firebase account → always a new user
+      setIsNewUser(true);
+      return { isNewUser: true };
+    },
+    []
+  );
+
+  const completeOnboarding = useCallback(
+    async (username: string, displayName: string) => {
+      if (!firebaseUser) throw new Error('Not authenticated');
+      const idToken = await firebaseUser.getIdToken();
+      const res = await authApi.registerFirebase({ firebaseIdToken: idToken, username, displayName });
+      localStorage.setItem('nexus_token', res.token);
+      setToken(res.token);
+      setUser(res.user);
+      setIsNewUser(false);
+    },
+    [firebaseUser]
+  );
+
+  const logout = useCallback(async () => {
+    await signOut(firebaseAuth);
     localStorage.removeItem('nexus_token');
     setToken(null);
     setUser(null);
-  };
+    setFirebaseUser(null);
+    setIsNewUser(false);
+  }, []);
 
   return (
     <AuthContext.Provider
       value={{
         user,
+        firebaseUser,
         token,
         isLoading,
         isAuthenticated: !!user,
-        login,
-        register,
+        isNewUser,
+        loginWithGoogle,
+        loginWithEmail,
+        registerWithEmail,
+        completeOnboarding,
         logout,
         refreshUser,
       }}
