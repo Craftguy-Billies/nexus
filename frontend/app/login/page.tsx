@@ -5,14 +5,16 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
+import { isFirebaseWebConfigured } from '@/lib/firebase';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleLogin = async () => {
@@ -26,6 +28,19 @@ export default function LoginPage() {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    setError('');
+    try {
+      await loginWithGoogle();
+      router.push('/feed');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Google login failed');
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -84,10 +99,14 @@ export default function LoginPage() {
         <div className="h-px flex-1 bg-neutral-200" />
       </div>
 
-      <button className="flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-200 py-2.5 text-[14px] font-medium text-black active:bg-neutral-50">
-        Continue with Google
+      <button
+        onClick={handleGoogleLogin}
+        disabled={!isFirebaseWebConfigured() || googleLoading || loading}
+        className="flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-200 py-2.5 text-[14px] font-medium text-black active:bg-neutral-50 disabled:opacity-40"
+      >
+        {googleLoading ? 'Signing in...' : 'Continue with Google'}
       </button>
-      <button className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-200 py-2.5 text-[14px] font-medium text-black active:bg-neutral-50">
+      <button className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-200 py-2.5 text-[14px] font-medium text-black active:bg-neutral-50 disabled:opacity-40">
         Continue with Apple
       </button>
 

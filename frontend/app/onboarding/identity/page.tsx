@@ -4,10 +4,11 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Eye, EyeOff, Check, X } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
+import { isFirebaseWebConfigured } from '@/lib/firebase';
 
 export default function OnboardingIdentity() {
   const router = useRouter();
-  const { register } = useAuth();
+  const { register, registerWithGoogle } = useAuth();
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -39,6 +40,20 @@ export default function OnboardingIdentity() {
       router.push('/onboarding/interests');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleRegister = async () => {
+    if (usernameValid !== true || !displayName) return;
+    setLoading(true);
+    setError('');
+    try {
+      await registerWithGoogle(username, displayName);
+      router.push('/onboarding/interests');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Google registration failed');
     } finally {
       setLoading(false);
     }
@@ -138,6 +153,14 @@ export default function OnboardingIdentity() {
           className="w-full rounded-lg bg-black py-3.5 text-[15px] font-semibold text-white disabled:opacity-40 active:opacity-80"
         >
           {loading ? 'Creating...' : 'Continue'}
+        </button>
+
+        <button
+          onClick={handleGoogleRegister}
+          disabled={!isFirebaseWebConfigured() || usernameValid !== true || !displayName || loading}
+          className="mt-2 w-full rounded-lg border border-neutral-200 py-3.5 text-[15px] font-semibold text-black disabled:opacity-40 active:bg-neutral-50"
+        >
+          Continue with Google
         </button>
       </div>
     </div>

@@ -2,6 +2,14 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { auth as authApi } from '@/lib/api';
+import {
+  firebaseGetIdToken,
+  firebaseLoginWithEmail,
+  firebaseLogout,
+  firebaseRegisterWithEmail,
+  firebaseSignInWithGoogle,
+  isFirebaseWebConfigured,
+} from '@/lib/firebase';
 import type { User } from '@/types';
 
 interface AuthContextType {
@@ -11,6 +19,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, username: string, displayName: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
+  registerWithGoogle: (username: string, displayName: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -33,6 +43,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const setSession = useCallback((nextToken: string, nextUser: User) => {
+    localStorage.setItem('nexus_token', nextToken);
+    setToken(nextToken);
+    setUser(nextUser);
+  }, []);
+
   useEffect(() => {
     const savedToken = localStorage.getItem('nexus_token');
     if (savedToken) {
@@ -44,23 +60,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshUser]);
 
   const login = async (email: string, password: string) => {
+    if (isFirebaseWebConfigured()) {
+      await firebaseLoginWithEmail(email, password);
+      const firebaseIdToken = await firebaseGetIdToken();
+      const res = await authApi.loginFirebase(firebaseIdToken);
+      setSession(res.token, res.user);
+      return;
+    }
+
     const res = await authApi.login({ email, password });
-    localStorage.setItem('nexus_token', res.token);
-    setToken(res.token);
-    setUser(res.user);
+    setSession(res.token, res.user);
   };
 
   const register = async (email: string, password: string, username: string, displayName: string) => {
+    if (isFirebaseWebConfigured()) {
+      await firebaseRegisterWithEmail(email, password);
+      const firebaseIdToken = await firebaseGetIdToken();
+      const res = await authApi.registerFirebase({ firebaseIdToken, username, displayName });
+      setSession(res.token, res.user);
+      return;
+    }
+
     const res = await authApi.register({ email, password, username, displayName });
-    localStorage.setItem('nexus_token', res.token);
-    setToken(res.token);
-    setUser(res.user);
+    setSession(res.token, res.user);
+  };
+
+  const loginWithGoogle = async () => {
+    if (!isFirebaseWebConfigured()) {
+      throw new Error('Firebase is not configured for the web app');
+    }
+
+    await firebaseSignInWithGoogle();
+    const firebaseIdToken = await firebaseGetIdToken();
+    const res = await authApi.loginFirebase(firebaseIdToken);
+    setSession(res.token, res.user);
+  };
+
+  const registerWithGoogle = async (username: string, displayName: string) => {
+    if (!isFirebaseWebConfigured()) {
+      throw new Error('Firebase is not configured for the web app');
+    }
+
+    await firebaseSignInWithGoogle();
+    const firebaseIdToken = await firebaseGetIdToken();
+
+    const res = await authApi.registerFirebase({ firebaseIdToken, username, displayName });
+    setSession(res.token, res.user);
   };
 
   const logout = () => {
     localStorage.removeItem('nexus_token');
     setToken(null);
     setUser(null);
+    firebaseLogout().catch(() => {});
   };
 
   return (
@@ -72,6 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         login,
         register,
+        loginWithGoogle,
+        registerWithGoogle,
         logout,
         refreshUser,
       }}
