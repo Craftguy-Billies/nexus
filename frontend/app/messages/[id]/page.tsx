@@ -15,11 +15,15 @@ export default function DMConversationPage() {
   const [aiTyping, setAiTyping] = useState(false);
   const [energyStatus, setEnergyStatus] = useState<EnergyStatus | null>(null);
   const [charName, setCharName] = useState('AI Character');
+  const [charAvatar, setCharAvatar] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!id) return;
-    aiCharacters.get(id).then((c) => setCharName(c.displayName)).catch(() => {});
+    aiCharacters.get(id).then((c) => {
+      setCharName(c.displayName);
+      setCharAvatar(c.avatar);
+    }).catch(() => {});
     dm.messages(id).then((r) => {
       const items = Array.isArray(r) ? r : (r as unknown as { items: DirectMessage[] }).items ?? [];
       setMessages(items);
@@ -42,8 +46,9 @@ export default function DMConversationPage() {
     setInput('');
     setSending(true);
 
+    const tempId = `temp-${Date.now()}`;
     const userMsg: DirectMessage = {
-      id: `temp-${Date.now()}`,
+      id: tempId,
       conversationId: id,
       content: text,
       senderType: 'user',
@@ -56,15 +61,17 @@ export default function DMConversationPage() {
       const raw = await dm.send(id, text) as unknown as Record<string, unknown>;
       const realUserMsg = (raw.userMessage || raw) as DirectMessage;
       const aiMsg = raw.aiMessage as DirectMessage | undefined;
-      const updated = [...messages.filter((m) => m.id !== userMsg.id)];
-      updated.push({ ...userMsg, id: realUserMsg.id || userMsg.id, createdAt: realUserMsg.createdAt || userMsg.createdAt });
-      if (aiMsg) updated.push({ id: aiMsg.id, conversationId: id, content: aiMsg.content, senderType: 'ai', createdAt: aiMsg.createdAt });
-      setMessages(updated);
+      setMessages((prev) => {
+        const filtered = prev.filter((m) => m.id !== tempId);
+        const updated = [...filtered, { ...userMsg, id: realUserMsg.id || userMsg.id, createdAt: realUserMsg.createdAt || userMsg.createdAt }];
+        if (aiMsg) updated.push({ id: aiMsg.id, conversationId: id, content: aiMsg.content, senderType: 'ai', createdAt: aiMsg.createdAt });
+        return updated;
+      });
       if (energyStatus) {
         setEnergyStatus({ ...energyStatus, currentEnergy: Math.max(0, energyStatus.currentEnergy - 1) });
       }
     } catch {
-      // handle
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
     } finally {
       setAiTyping(false);
       setSending(false);
@@ -82,9 +89,13 @@ export default function DMConversationPage() {
           <ArrowLeft className="h-6 w-6" strokeWidth={1.8} />
         </button>
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-200 text-[12px] font-semibold text-neutral-500">
-            {charName.charAt(0)}
-          </div>
+          {charAvatar ? (
+            <img src={charAvatar} alt={charName} className="h-8 w-8 rounded-full object-cover" />
+          ) : (
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-200 text-[12px] font-semibold text-neutral-500">
+              {charName.charAt(0)}
+            </div>
+          )}
           <div>
             <div className="flex items-center gap-1">
               <span className="text-[14px] font-semibold text-black">{charName}</span>
@@ -98,16 +109,16 @@ export default function DMConversationPage() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {messages.map((msg) => (
-          <div key={msg.id} className={`mb-3 flex ${msg.senderType === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div key={msg.id} className={`mb-3 flex ${msg.senderType === 'human' || msg.senderType === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div
               className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 text-[14px] leading-relaxed ${
-                msg.senderType === 'user'
+                msg.senderType === 'human' || msg.senderType === 'user'
                   ? 'bg-black text-white'
                   : 'bg-neutral-100 text-black'
               }`}
             >
               <p>{msg.content}</p>
-              <p className={`mt-1 text-[10px] ${msg.senderType === 'user' ? 'text-neutral-400' : 'text-neutral-400'}`}>
+              <p className={`mt-1 text-[10px] ${msg.senderType === 'human' || msg.senderType === 'user' ? 'text-neutral-400' : 'text-neutral-400'}`}>
                 {new Date(msg.createdAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
               </p>
             </div>

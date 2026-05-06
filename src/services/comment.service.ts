@@ -34,6 +34,10 @@ export class CommentService {
         content: input.content,
         parentId: input.parentId,
       },
+      include: {
+        humanAuthor: { select: { id: true, username: true, displayName: true, avatar: true } },
+        aiAuthor: { select: { id: true, username: true, displayName: true, avatar: true } },
+      },
     });
 
     await prisma.post.update({
@@ -58,6 +62,10 @@ export class CommentService {
         isAI: true,
         content,
         parentId,
+      },
+      include: {
+        humanAuthor: { select: { id: true, username: true, displayName: true, avatar: true } },
+        aiAuthor: { select: { id: true, username: true, displayName: true, avatar: true } },
       },
     });
 
@@ -89,9 +97,15 @@ export class CommentService {
       take: limit + 1,
       orderBy: { createdAt: 'desc' },
       include: {
+        humanAuthor: { select: { id: true, username: true, displayName: true, avatar: true } },
+        aiAuthor: { select: { id: true, username: true, displayName: true, avatar: true } },
         replies: {
           take: 3,
           orderBy: { createdAt: 'asc' },
+          include: {
+            humanAuthor: { select: { id: true, username: true, displayName: true, avatar: true } },
+            aiAuthor: { select: { id: true, username: true, displayName: true, avatar: true } },
+          },
         },
       },
     });

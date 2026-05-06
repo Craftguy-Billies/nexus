@@ -38,7 +38,8 @@ export class FeedService {
 
     const paginatedPosts = sortedPosts.slice(startIndex, startIndex + limit + 1);
     const hasMore = paginatedPosts.length > limit;
-    const items = hasMore ? paginatedPosts.slice(0, limit) : paginatedPosts;
+    const baseItems = hasMore ? paginatedPosts.slice(0, limit) : paginatedPosts;
+    const items = await this.attachLikeState(baseItems, userId);
     const nextToken =
       hasMore && items.length > 0
         ? Buffer.from(items[items.length - 1].createdAt.toISOString()).toString(
@@ -51,7 +52,8 @@ export class FeedService {
 
   async getDiscoverFeed(
     limit = 20,
-    cursor?: string
+    cursor?: string,
+    userId?: string
   ): Promise<PaginatedResult<Post>> {
     const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
@@ -77,7 +79,8 @@ export class FeedService {
 
     const sorted = this.sortWithFreshnessBias(posts).slice(0, limit + 1);
     const hasMore = sorted.length > limit;
-    const items = hasMore ? sorted.slice(0, limit) : sorted;
+    const baseItems = hasMore ? sorted.slice(0, limit) : sorted;
+    const items = await this.attachLikeState(baseItems, userId);
     const nextToken =
       hasMore && items.length > 0
         ? Buffer.from(items[items.length - 1].createdAt.toISOString()).toString(
@@ -95,9 +98,10 @@ export class FeedService {
   ): Promise<PaginatedResult<Post>> {
     const following = await prisma.follow.findMany({
       where: { followerId: userId, status: 'active' },
-      select: { followingId: true },
+      select: { followingId: true, followingType: true },
     });
 
+    console.log('getFollowingFeed for user:', userId, 'follows:', following);
     const followingIds = following.map((f) => f.followingId);
     if (followingIds.length === 0) return { items: [], nextToken: null };
 
@@ -120,8 +124,48 @@ export class FeedService {
       include: authorInclude,
     });
 
+    console.log('getFollowingFeed posts found:', posts.length, 'for followingIds:', followingIds);
+
     const hasMore = posts.length > limit;
-    const items = hasMore ? posts.slice(0, limit) : posts;
+    const baseItems = hasMore ? posts.slice(0, limit) : posts;
+    const items = await this.attachLikeState(baseItems, userId);
+    const nextToken =
+      hasMore && items.length > 0
+        ? Buffer.from(items[items.length - 1].createdAt.toISOString()).toString(
+            'base64'
+          )
+        : null;
+
+    return { items, nextToken };
+  }
+
+  async getUserPosts(
+    userId: string,
+    limit = 20,
+    cursor?: string
+  ): Promise<PaginatedResult<Post>> {
+    const where: Prisma.PostWhereInput = {
+      authorId: userId,
+      isArchived: false,
+      moderationStatus: 'approved',
+    };
+
+    if (cursor) {
+      where.createdAt = {
+        lt: new Date(Buffer.from(cursor, 'base64').toString()),
+      };
+    }
+
+    const posts = await prisma.post.findMany({
+      where,
+      take: limit + 1,
+      orderBy: { createdAt: 'desc' },
+      include: authorInclude,
+    });
+
+    const hasMore = posts.length > limit;
+    const baseItems = hasMore ? posts.slice(0, limit) : posts;
+    const items = await this.attachLikeState(baseItems, userId);
     const nextToken =
       hasMore && items.length > 0
         ? Buffer.from(items[items.length - 1].createdAt.toISOString()).toString(
@@ -230,6 +274,29 @@ export class FeedService {
       );
       return scoreB - scoreA;
     });
+  }
+
+  private async attachLikeState(posts: Post[], userId?: string): Promise<Post[]> {
+    if (posts.length === 0) return posts;
+
+    const postIds = posts.map((p) => p.id);
+    let likedPostIds = new Set<string>();
+
+    if (userId) {
+      const likes = await prisma.like.findMany({
+        where: {
+          authorId: userId,
+          postId: { in: postIds },
+        },
+        select: { postId: true },
+      });
+      likedPostIds = new Set(likes.map((l) => l.postId));
+    }
+
+    return posts.map((post) => ({
+      ...post,
+      isLikedByCurrentUser: likedPostIds.has(post.id),
+    }));
   }
 }
 

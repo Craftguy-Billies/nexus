@@ -31,7 +31,8 @@ router.get(
       const { limit, cursor } = req.query;
       const result = await feedService.getDiscoverFeed(
         parseInt(limit as string) || 20,
-        cursor as string
+        cursor as string,
+        req.user?.userId
       );
       res.json(result);
     } catch (err) {
@@ -48,6 +49,24 @@ router.get(
       const { limit, cursor } = req.query;
       const result = await feedService.getFollowingFeed(
         req.user!.userId,
+        parseInt(limit as string) || 20,
+        cursor as string
+      );
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.get(
+  '/user/:userId',
+  authMiddleware,
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const { limit, cursor } = req.query;
+      const result = await feedService.getUserPosts(
+        req.params.userId as string,
         parseInt(limit as string) || 20,
         cursor as string
       );

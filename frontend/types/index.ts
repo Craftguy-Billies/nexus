@@ -10,6 +10,9 @@ export interface User {
   isAdmin: boolean;
   isVerified: boolean;
   firebaseUid: string | null;
+  onboardingStep?: number;
+  onboardingInterests?: string[];
+  onboardingCompletedAt?: string | null;
   createdAt: string;
   _count?: {
     posts: number;
@@ -22,8 +25,8 @@ export interface AICharacter {
   id: string;
   username: string;
   displayName: string;
-  avatarUrl: string | null;
-  coverUrl: string | null;
+  avatar: string;
+  coverImage: string | null;
   persona: string;
   backstory: string;
   personalityProfile: PersonalityProfile;
@@ -34,6 +37,11 @@ export interface AICharacter {
   isPublic: boolean;
   universeId: string | null;
   universe: Universe | null;
+  followerCount: number;
+  followingCount: number;
+  totalPosts: number;
+  totalLikes: number;
+  totalComments: number;
   createdAt: string;
   _count?: {
     posts: number;
@@ -111,7 +119,7 @@ export interface DirectMessage {
   id: string;
   conversationId: string;
   content: string;
-  senderType: 'user' | 'ai';
+  senderType: 'human' | 'user' | 'ai';
   createdAt: string;
 }
 

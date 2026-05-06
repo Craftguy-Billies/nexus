@@ -7,164 +7,115 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================================
-// User (Human)
-// ============================================================
 model User {
-  id          String   @id @default(uuid())
-  firebaseUid String   @unique @map("firebase_uid")
-  // username is a display handle — duplicates are allowed.
-  // email/firebaseUid are the true unique identifiers.
-  username    String
-  email       String   @unique
-  displayName String   @map("display_name")
-  bio         String?
-  avatar      String?
-  coverImage  String?  @map("cover_image")
-
-  followerCount  Int @default(0) @map("follower_count")
-  followingCount Int @default(0) @map("following_count")
-  postCount      Int @default(0) @map("post_count")
-
-  isPrivate  Boolean @default(false) @map("is_private")
-  isVerified Boolean @default(false) @map("is_verified")
-
-  isPremium        Boolean          @default(false) @map("is_premium")
-  subscriptionTier SubscriptionTier @default(free) @map("subscription_tier")
-
-  energyBalance        Int      @default(30) @map("energy_balance")
-  energyLastRefreshedAt DateTime @default(now()) @map("energy_last_refreshed_at")
-  gemsBalance          Int      @default(0) @map("gems_balance")
-
-  isActive    Boolean   @default(true) @map("is_active")
-  isBanned    Boolean   @default(false) @map("is_banned")
-  banReason   String?   @map("ban_reason")
-  lastActiveAt DateTime @default(now()) @map("last_active_at")
-
-  expoPushToken       String?   @map("expo_push_token")
-  pushTokenUpdatedAt  DateTime? @map("push_token_updated_at")
-
-  notifyNewFollower   Boolean @default(true) @map("notify_new_follower")
-  notifyNewLike       Boolean @default(true) @map("notify_new_like")
-  notifyNewComment    Boolean @default(true) @map("notify_new_comment")
-  notifyAiInteraction Boolean @default(true) @map("notify_ai_interaction")
-  notifySystemAlerts  Boolean @default(true) @map("notify_system_alerts")
-  notifyMarketing     Boolean @default(false) @map("notify_marketing")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  posts         Post[]
-  comments      Comment[]
-  likes         Like[]
-  followsGiven  Follow[]           @relation("follower")
-  followsReceived Follow[]         @relation("following")
-  subscription  UserSubscription?
-  inventory     UserInventory?
-  notifications Notification[]
-  tokenUsages   TokenUsage[]       @relation("triggeredBy")
-  admins        Admin[]
+  id                    String            @id @default(uuid())
+  firebaseUid           String            @unique @map("firebase_uid")
+  username              String
+  email                 String            @unique
+  displayName           String            @map("display_name")
+  bio                   String?
+  avatar                String?
+  coverImage            String?           @map("cover_image")
+  followerCount         Int               @default(0) @map("follower_count")
+  followingCount        Int               @default(0) @map("following_count")
+  postCount             Int               @default(0) @map("post_count")
+  isPrivate             Boolean           @default(false) @map("is_private")
+  isVerified            Boolean           @default(false) @map("is_verified")
+  isPremium             Boolean           @default(false) @map("is_premium")
+  subscriptionTier      SubscriptionTier  @default(free) @map("subscription_tier")
+  energyBalance         Int               @default(30) @map("energy_balance")
+  energyLastRefreshedAt DateTime          @default(now()) @map("energy_last_refreshed_at")
+  gemsBalance           Int               @default(0) @map("gems_balance")
+  isActive              Boolean           @default(true) @map("is_active")
+  isBanned              Boolean           @default(false) @map("is_banned")
+  banReason             String?           @map("ban_reason")
+  lastActiveAt          DateTime          @default(now()) @map("last_active_at")
+  expoPushToken         String?           @map("expo_push_token")
+  pushTokenUpdatedAt    DateTime?         @map("push_token_updated_at")
+  notifyNewFollower     Boolean           @default(true) @map("notify_new_follower")
+  notifyNewLike         Boolean           @default(true) @map("notify_new_like")
+  notifyNewComment      Boolean           @default(true) @map("notify_new_comment")
+  notifyAiInteraction   Boolean           @default(true) @map("notify_ai_interaction")
+  notifySystemAlerts    Boolean           @default(true) @map("notify_system_alerts")
+  notifyMarketing       Boolean           @default(false) @map("notify_marketing")
+  onboardingStep        Int               @default(0) @map("onboarding_step")
+  onboardingInterests   String[]          @default([]) @map("onboarding_interests")
+  onboardingCompletedAt DateTime?         @map("onboarding_completed_at")
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+  admins                Admin[]
+  conversations         Conversation[]
+  notifications         Notification[]
+  tokenUsages           TokenUsage[]      @relation("triggeredBy")
+  inventory             UserInventory?
+  subscription          UserSubscription?
 
   @@index([username])
   @@map("users")
 }
 
-// ============================================================
-// AI Character
-// ============================================================
 model AICharacter {
-  id          String  @id @default(uuid())
-  username    String  @unique
-  displayName String  @map("display_name")
-  avatar      String
-  coverImage  String? @map("cover_image")
-  bio         String
-
-  persona    String
-  backstory  String  @default("")
-  interests  String[]
-  expertise  String[]
-  universeId String? @map("universe_id")
-
-  // Personality profile (Big Five + extended) stored as JSON
-  personalityProfile Json @map("personality_profile")
-
-  // LLM response style stored as JSON
-  responseStyle Json @map("response_style")
-
-  // Activity schedule stored as JSON
-  activitySchedule Json @map("activity_schedule")
-
-  followerCount  Int @default(0) @map("follower_count")
-  followingCount Int @default(0) @map("following_count")
-  totalPosts     Int @default(0) @map("total_posts")
-  totalLikes     Int @default(0) @map("total_likes")
-  totalComments  Int @default(0) @map("total_comments")
-
-  monthlyTokenBudget  Int @default(500000) @map("monthly_token_budget")
-  totalTokensConsumed Int @default(0) @map("total_tokens_consumed")
-  currentMonthTokens  Int @default(0) @map("current_month_tokens")
-
-  isActive  Boolean @default(true) @map("is_active")
-  isPublic  Boolean @default(true) @map("is_public")
-  createdBy String  @map("created_by")
-
-  // Relationship memories stored as JSON
-  userRelationships Json? @map("user_relationships")
-
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
-  lastInteractionAt DateTime? @map("last_interaction_at")
-
-  universe    Universe?    @relation(fields: [universeId], references: [id])
-  posts       Post[]
-  comments    Comment[]
-  likes       Like[]
-  tokenUsages TokenUsage[]
-  scenarioCharacters ScenarioCharacter[]
+  id                  String              @id @default(uuid())
+  username            String              @unique
+  displayName         String              @map("display_name")
+  avatar              String
+  coverImage          String?             @map("cover_image")
+  bio                 String
+  persona             String
+  backstory           String              @default("")
+  interests           String[]
+  expertise           String[]
+  universeId          String?             @map("universe_id")
+  personalityProfile  Json                @map("personality_profile")
+  responseStyle       Json                @map("response_style")
+  activitySchedule    Json                @map("activity_schedule")
+  followerCount       Int                 @default(0) @map("follower_count")
+  followingCount      Int                 @default(0) @map("following_count")
+  totalPosts          Int                 @default(0) @map("total_posts")
+  totalLikes          Int                 @default(0) @map("total_likes")
+  totalComments       Int                 @default(0) @map("total_comments")
+  monthlyTokenBudget  Int                 @default(500000) @map("monthly_token_budget")
+  totalTokensConsumed Int                 @default(0) @map("total_tokens_consumed")
+  currentMonthTokens  Int                 @default(0) @map("current_month_tokens")
+  isActive            Boolean             @default(true) @map("is_active")
+  isPublic            Boolean             @default(true) @map("is_public")
+  createdBy           String              @map("created_by")
+  userRelationships   Json?               @map("user_relationships")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+  lastInteractionAt   DateTime?           @map("last_interaction_at")
+  universe            Universe?           @relation(fields: [universeId], references: [id])
+  scenarioCharacters  ScenarioCharacter[]
+  tokenUsages         TokenUsage[]
 
   @@map("ai_characters")
 }
 
-// ============================================================
-// Post
-// ============================================================
 model Post {
-  id        String   @id @default(uuid())
-  content   String
-  mediaUrls String[] @map("media_urls")
-  mediaTypes String[] @map("media_types")
-
-  authorId   String     @map("author_id")
-  authorType AuthorType @map("author_type")
-  isAI       Boolean    @default(false) @map("is_ai")
-
-  isEdited   Boolean @default(false) @map("is_edited")
-  isPinned   Boolean @default(false) @map("is_pinned")
-  isArchived Boolean @default(false) @map("is_archived")
-
-  likesCount    Int @default(0) @map("likes_count")
-  commentsCount Int @default(0) @map("comments_count")
-  sharesCount   Int @default(0) @map("shares_count")
-  viewsCount    Int @default(0) @map("views_count")
-
-  tags     String[]
-  mentions String[]
-
-  // AI generation metadata stored as JSON
-  aiGenerationMeta Json? @map("ai_generation_meta")
-
+  id                String           @id @default(uuid())
+  content           String
+  mediaUrls         String[]         @map("media_urls")
+  mediaTypes        String[]         @map("media_types")
+  authorId          String           @map("author_id")
+  authorType        AuthorType       @map("author_type")
+  isAI              Boolean          @default(false) @map("is_ai")
+  isEdited          Boolean          @default(false) @map("is_edited")
+  isPinned          Boolean          @default(false) @map("is_pinned")
+  isArchived        Boolean          @default(false) @map("is_archived")
+  likesCount        Int              @default(0) @map("likes_count")
+  commentsCount     Int              @default(0) @map("comments_count")
+  sharesCount       Int              @default(0) @map("shares_count")
+  viewsCount        Int              @default(0) @map("views_count")
+  tags              String[]
+  mentions          String[]
+  aiGenerationMeta  Json?            @map("ai_generation_meta")
   moderationStatus  ModerationStatus @default(pending) @map("moderation_status")
   moderationDetails Json?            @map("moderation_details")
-
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  publishedAt DateTime? @map("published_at")
-
-  humanAuthor User?        @relation(fields: [authorId], references: [id], map: "post_human_author")
-  aiAuthor    AICharacter? @relation(fields: [authorId], references: [id], map: "post_ai_author")
-  comments    Comment[]
-  likes       Like[]
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+  publishedAt       DateTime?        @map("published_at")
+  comments          Comment[]
+  likes             Like[]
 
   @@index([authorId, authorType])
   @@index([createdAt])
@@ -172,61 +123,40 @@ model Post {
   @@map("posts")
 }
 
-// ============================================================
-// Comment
-// ============================================================
 model Comment {
-  id     String @id @default(uuid())
-  postId String @map("post_id")
-
+  id         String     @id @default(uuid())
+  postId     String     @map("post_id")
   authorId   String     @map("author_id")
   authorType AuthorType @map("author_type")
   isAI       Boolean    @default(false) @map("is_ai")
-
-  content  String
-  parentId String? @map("parent_id")
-
-  likesCount Int     @default(0) @map("likes_count")
-  isEdited   Boolean @default(false) @map("is_edited")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  post        Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
-  parent      Comment?     @relation("CommentReplies", fields: [parentId], references: [id])
-  replies     Comment[]    @relation("CommentReplies")
-  humanAuthor User?        @relation(fields: [authorId], references: [id], map: "comment_human_author")
-  aiAuthor    AICharacter? @relation(fields: [authorId], references: [id], map: "comment_ai_author")
+  content    String
+  parentId   String?    @map("parent_id")
+  likesCount Int        @default(0) @map("likes_count")
+  isEdited   Boolean    @default(false) @map("is_edited")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+  parent     Comment?   @relation("CommentReplies", fields: [parentId], references: [id])
+  replies    Comment[]  @relation("CommentReplies")
+  post       Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@index([postId])
   @@index([parentId])
   @@map("comments")
 }
 
-// ============================================================
-// Like
-// ============================================================
 model Like {
-  id     String @id @default(uuid())
-  postId String @map("post_id")
-
+  id         String     @id @default(uuid())
+  postId     String     @map("post_id")
   authorId   String     @map("author_id")
   authorType AuthorType @map("author_type")
   isAI       Boolean    @default(false) @map("is_ai")
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  post        Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
-  humanAuthor User?        @relation(fields: [authorId], references: [id], map: "like_human_author")
-  aiAuthor    AICharacter? @relation(fields: [authorId], references: [id], map: "like_ai_author")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  post       Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([postId, authorId])
   @@map("likes")
 }
 
-// ============================================================
-// Follow
-// ============================================================
 model Follow {
   id            String       @id @default(uuid())
   followerId    String       @map("follower_id")
@@ -234,11 +164,7 @@ model Follow {
   followingId   String       @map("following_id")
   followingType AuthorType   @map("following_type")
   status        FollowStatus @default(active)
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  follower  User @relation("follower", fields: [followerId], references: [id])
-  following User @relation("following", fields: [followingId], references: [id])
+  createdAt     DateTime     @default(now()) @map("created_at")
 
   @@unique([followerId, followingId])
   @@index([followerId])
@@ -246,189 +172,165 @@ model Follow {
   @@map("follows")
 }
 
-// ============================================================
-// Token Usage
-// ============================================================
 model TokenUsage {
-  id              String @id @default(uuid())
-  aiCharacterId   String @map("ai_character_id")
-  triggeredByUserId String? @map("triggered_by_user_id")
-
-  promptTokens     Int @map("prompt_tokens")
-  completionTokens Int @map("completion_tokens")
-  totalTokens      Int @map("total_tokens")
-
-  model    String
-  provider String
-
-  costPer1KInputTokens  Float @map("cost_per_1k_input_tokens")
-  costPer1KOutputTokens Float @map("cost_per_1k_output_tokens")
-  totalCostUsd          Float @map("total_cost_usd")
-
-  operation String
-  yearMonth String @map("year_month")
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  aiCharacter   AICharacter @relation(fields: [aiCharacterId], references: [id])
-  triggeredBy   User?       @relation("triggeredBy", fields: [triggeredByUserId], references: [id])
+  id                    String      @id @default(uuid())
+  aiCharacterId         String      @map("ai_character_id")
+  triggeredByUserId     String?     @map("triggered_by_user_id")
+  promptTokens          Int         @map("prompt_tokens")
+  completionTokens      Int         @map("completion_tokens")
+  totalTokens           Int         @map("total_tokens")
+  model                 String
+  provider              String
+  costPer1KInputTokens  Float       @map("cost_per_1k_input_tokens")
+  costPer1KOutputTokens Float       @map("cost_per_1k_output_tokens")
+  totalCostUsd          Float       @map("total_cost_usd")
+  operation             String
+  yearMonth             String      @map("year_month")
+  createdAt             DateTime    @default(now()) @map("created_at")
+  aiCharacter           AICharacter @relation(fields: [aiCharacterId], references: [id])
+  triggeredBy           User?       @relation("triggeredBy", fields: [triggeredByUserId], references: [id])
 
   @@index([aiCharacterId, yearMonth])
   @@index([yearMonth])
   @@map("token_usages")
 }
 
-// ============================================================
-// User Subscription
-// ============================================================
 model UserSubscription {
-  id     String @id @default(uuid())
-  userId String @unique @map("user_id")
-
-  tier   SubscriptionTier   @default(free)
-  status SubscriptionStatus @default(active)
-
-  revenueCatCustomerId    String? @map("revenuecat_customer_id")
-  revenueCatEntitlementId String? @map("revenuecat_entitlement_id")
-
-  currentPeriodStart DateTime? @map("current_period_start")
-  currentPeriodEnd   DateTime? @map("current_period_end")
-
-  features Json
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                      String             @id @default(uuid())
+  userId                  String             @unique @map("user_id")
+  tier                    SubscriptionTier   @default(free)
+  status                  SubscriptionStatus @default(active)
+  revenueCatCustomerId    String?            @map("revenuecat_customer_id")
+  revenueCatEntitlementId String?            @map("revenuecat_entitlement_id")
+  currentPeriodStart      DateTime?          @map("current_period_start")
+  currentPeriodEnd        DateTime?          @map("current_period_end")
+  features                Json
+  createdAt               DateTime           @default(now()) @map("created_at")
+  updatedAt               DateTime           @updatedAt @map("updated_at")
+  user                    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_subscriptions")
 }
 
-// ============================================================
-// User Inventory
-// ============================================================
 model UserInventory {
-  id     String @id @default(uuid())
-  userId String @unique @map("user_id")
-
-  energyBalance Int @default(30) @map("energy_balance")
-  gemsBalance   Int @default(0) @map("gems_balance")
-
-  lastEnergyRefreshAt DateTime @default(now()) @map("last_energy_refresh_at")
-  dailyStreakDays      Int      @default(0) @map("daily_streak_days")
-  lastStreakClaimAt    DateTime? @map("last_streak_claim_at")
-  adsWatchedToday      Int      @default(0) @map("ads_watched_today")
-  lastAdWatchAt        DateTime? @map("last_ad_watch_at")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                  String    @id @default(uuid())
+  userId              String    @unique @map("user_id")
+  energyBalance       Int       @default(30) @map("energy_balance")
+  gemsBalance         Int       @default(0) @map("gems_balance")
+  lastEnergyRefreshAt DateTime  @default(now()) @map("last_energy_refresh_at")
+  dailyStreakDays     Int       @default(0) @map("daily_streak_days")
+  lastStreakClaimAt   DateTime? @map("last_streak_claim_at")
+  adsWatchedToday     Int       @default(0) @map("ads_watched_today")
+  lastAdWatchAt       DateTime? @map("last_ad_watch_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_inventories")
 }
 
-// ============================================================
-// Notification
-// ============================================================
 model Notification {
-  id     String @id @default(uuid())
-  userId String @map("user_id")
-
-  type  String
-  title String
-  body  String
-
-  data   Json?
-  isRead Boolean @default(false) @map("is_read")
-
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  type      String
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean  @default(false) @map("is_read")
   createdAt DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
   @@index([createdAt])
   @@map("notifications")
 }
 
-// ============================================================
-// Universe
-// ============================================================
 model Universe {
-  id          String @id @default(uuid())
-  name        String @unique
+  id          String        @id @default(uuid())
+  name        String        @unique
   description String
-  coverImage  String? @map("cover_image")
+  coverImage  String?       @map("cover_image")
   lore        String
   rules       String[]
-  isPublic    Boolean @default(true) @map("is_public")
-  createdBy   String  @map("created_by")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  characters AICharacter[]
-  scenarios  Scenario[]
+  isPublic    Boolean       @default(true) @map("is_public")
+  createdBy   String        @map("created_by")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  characters  AICharacter[]
+  scenarios   Scenario[]
 
   @@map("universes")
 }
 
-// ============================================================
-// Scenario
-// ============================================================
 model Scenario {
-  id          String @id @default(uuid())
-  title       String
-  description String
-  coverImage  String? @map("cover_image")
-
-  sceneSetting    String @map("scene_setting")
-  universeId      String? @map("universe_id")
-  maxParticipants Int    @default(1) @map("max_participants")
-  energyCost      Int    @default(5) @map("energy_cost")
-  isActive        Boolean @default(true) @map("is_active")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  universe   Universe? @relation(fields: [universeId], references: [id])
-  characters ScenarioCharacter[]
+  id              String              @id @default(uuid())
+  title           String
+  description     String
+  coverImage      String?             @map("cover_image")
+  sceneSetting    String              @map("scene_setting")
+  universeId      String?             @map("universe_id")
+  maxParticipants Int                 @default(1) @map("max_participants")
+  energyCost      Int                 @default(5) @map("energy_cost")
+  isActive        Boolean             @default(true) @map("is_active")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+  characters      ScenarioCharacter[]
+  universe        Universe?           @relation(fields: [universeId], references: [id])
 
   @@map("scenarios")
 }
 
-// ============================================================
-// Scenario Character (join table)
-// ============================================================
 model ScenarioCharacter {
-  id          String @id @default(uuid())
-  scenarioId  String @map("scenario_id")
-  characterId String @map("character_id")
-
-  scenario  Scenario    @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
-  character AICharacter @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  id          String      @id @default(uuid())
+  scenarioId  String      @map("scenario_id")
+  characterId String      @map("character_id")
+  character   AICharacter @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  scenario    Scenario    @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
 
   @@unique([scenarioId, characterId])
   @@map("scenario_characters")
 }
 
-// ============================================================
-// Admin
-// ============================================================
+model Conversation {
+  id             String          @id @default(uuid())
+  userId         String          @map("user_id")
+  aiCharacterId  String          @map("ai_character_id")
+  messageCount   Int             @default(0) @map("message_count")
+  messageSummary String?         @map("message_summary")
+  lastMessageAt  DateTime        @default(now()) @map("last_message_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages       DirectMessage[]
+
+  @@unique([userId, aiCharacterId])
+  @@map("conversations")
+}
+
+model DirectMessage {
+  id             String       @id @default(uuid())
+  conversationId String       @map("conversation_id")
+  senderId       String       @map("sender_id")
+  senderType     String       @map("sender_type")
+  content        String
+  createdAt      DateTime     @default(now()) @map("created_at")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@map("direct_messages")
+}
+
 model Admin {
   id          String   @id @default(uuid())
   userId      String   @map("user_id")
   permissions String[]
   createdAt   DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("admins")
 }
 
-// ============================================================
-// Enums
-// ============================================================
 enum AuthorType {
   human
   ai

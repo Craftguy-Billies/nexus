@@ -9,6 +9,7 @@ router.post(
   '/:id',
   authMiddleware,
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    console.log('POST /follow/:id route called:', { params: req.params, body: req.body, userId: req.user?.userId });
     try {
       const { followingType } = req.body;
       const follow = await followService.followUser(
@@ -16,8 +17,10 @@ router.post(
         req.params.id as string,
         followingType || 'human'
       );
+      console.log('Follow created successfully, returning:', follow);
       res.status(201).json(follow);
     } catch (err) {
+      console.error('Follow error:', err);
       next(err);
     }
   }
@@ -106,6 +109,19 @@ router.get(
         req.params.targetId as string
       );
       res.json({ isFollowing });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.get(
+  '/following',
+  authMiddleware,
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const follows = await followService.getUserFollows(req.user!.userId);
+      res.json({ items: follows });
     } catch (err) {
       next(err);
     }

@@ -14,7 +14,19 @@ import type {
   PaginatedResponse,
 } from '@/types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3110/api';
+
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
 
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -29,10 +41,24 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const url = `${API_BASE}${path}`;
+  console.log('API request:', { url, method: options.method, path });
+  const res = await fetch(url, { ...options, headers });
+  console.log('API response:', { url, status: res.status, ok: res.ok });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || body.message || `Request failed: ${res.status}`);
+    const body = await res.json().catch(() => ({} as Record<string, unknown>));
+    const nestedError = typeof body.error === 'object' && body.error !== null
+      ? body.error as { code?: string; message?: string }
+      : null;
+    const message =
+      nestedError?.message ||
+      (typeof body.error === 'string' ? body.error : undefined) ||
+      (typeof body.message === 'string' ? body.message : undefined) ||
+      `Request failed: ${res.status}`;
+    const code =
+      nestedError?.code ||
+      (typeof body.code === 'string' ? body.code : undefined);
+    throw new ApiError(message, res.status, code);
   }
   return res.json();
 }
@@ -50,7 +76,7 @@ export const auth = {
     return request<AuthResponse>('/auth/register/firebase', { method: 'POST', body: JSON.stringify(data) });
   },
   loginFirebase(firebaseIdToken: string) {
-    return request<AuthResponse>('/auth/login/firebase', { method: 'POST', body: JSON.stringify({ firebaseIdToken }) });
+    return request<AuthResponse | { isNewUser: true }>('/auth/login/firebase', { method: 'POST', body: JSON.stringify({ firebaseIdToken }) });
   },
   me() {
     return request<User>('/auth/me');
@@ -71,6 +97,12 @@ export const feed = {
     if (cursor) params.set('cursor', cursor);
     const qs = params.toString() ? `?${params}` : '';
     return request<PaginatedResponse<Post>>(`${routeMap[tab] || '/feed/home'}${qs}`);
+  },
+  getUserPosts(userId: string, cursor?: string) {
+    const params = new URLSearchParams();
+    if (cursor) params.set('cursor', cursor);
+    const qs = params.toString() ? `?${params}` : '';
+    return request<PaginatedResponse<Post>>(`/feed/user/${userId}${qs}`);
   },
 };
 
@@ -109,19 +141,42 @@ export const users = {
   search(q: string) {
     return request<{ items: User[] }>(`/users/search?q=${encodeURIComponent(q)}`);
   },
+  saveOnboardingInterests(interests: string[]) {
+    return request<User>('/users/onboarding/interests', {
+      method: 'PUT',
+      body: JSON.stringify({ interests }),
+    });
+  },
+  saveOnboardingFriends(aiCharacterIds: string[]) {
+    return request<User>('/users/onboarding/friends', {
+      method: 'PUT',
+      body: JSON.stringify({ aiCharacterIds }),
+    });
+  },
+  completeOnboarding() {
+    return request<User>('/users/onboarding/complete', { method: 'PUT' });
+  },
+  deleteAccount() {
+    return request<{ message: string }>('/users/me', { method: 'DELETE' });
+  },
 };
 
 // ─── Follows ───────────────────────────────────────────────
 
 export const follows = {
   follow(userId: string, followingType: string = 'human') {
+    console.log('API client: follow called', { userId, followingType });
     return request<void>(`/follow/${userId}`, { method: 'POST', body: JSON.stringify({ followingType }) });
   },
   unfollow(userId: string) {
+    console.log('API client: unfollow called', { userId });
     return request<void>(`/follow/${userId}`, { method: 'DELETE' });
   },
   check(targetId: string) {
     return request<{ isFollowing: boolean }>(`/follow/check/${targetId}`);
+  },
+  getFollowing() {
+    return request<{ items: { followingId: string; followingType: string }[] }>(`/follow/following`);
   },
   followers(userId: string) {
     return request<PaginatedResponse<User>>(`/users/${userId}/followers`);

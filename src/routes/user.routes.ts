@@ -85,6 +85,62 @@ router.put(
   }
 );
 
+router.put(
+  '/onboarding/interests',
+  authMiddleware,
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const interests = Array.isArray(req.body?.interests) ? req.body.interests : [];
+      const user = await userService.saveOnboardingInterests(req.user!.userId, interests);
+      res.json(user);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.put(
+  '/onboarding/friends',
+  authMiddleware,
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const aiCharacterIds = Array.isArray(req.body?.aiCharacterIds)
+        ? req.body.aiCharacterIds
+        : [];
+      const user = await userService.saveOnboardingFriends(req.user!.userId, aiCharacterIds);
+      res.json(user);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.put(
+  '/onboarding/complete',
+  authMiddleware,
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const user = await userService.completeOnboarding(req.user!.userId);
+      res.json(user);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.delete(
+  '/me',
+  authMiddleware,
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const result = await userService.deleteAccount(req.user!.userId);
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 router.get(
   '/:id/followers',
   optionalAuth,

@@ -34,9 +34,12 @@ export default function DiscoverPage() {
       return next;
     });
     try {
+      console.log('Calling follow API:', { charId, wasFollowing });
       if (wasFollowing) await followsApi.unfollow(charId);
       else await followsApi.follow(charId, 'ai');
-    } catch {
+      console.log('Follow API call successful');
+    } catch (err) {
+      console.error('Follow API call failed:', err);
       setFollowedIds((prev) => {
         const next = new Set(prev);
         wasFollowing ? next.add(charId) : next.delete(charId);
@@ -48,6 +51,10 @@ export default function DiscoverPage() {
   useEffect(() => {
     aiCharacters.list({ limit: 10 }).then((r) => setCharacters(r.items)).catch(() => {});
     universesApi.list().then((r) => setUnis(r.items)).catch(() => {});
+    followsApi.getFollowing().then((r) => {
+      const ids = new Set(r.items.filter((item) => item.followingType === 'ai').map((item) => item.followingId));
+      setFollowedIds(ids);
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -84,22 +91,29 @@ export default function DiscoverPage() {
             <div className="py-8 text-center text-[13px] text-neutral-400">No results found</div>
           )}
           {searchResults.map((char) => (
-            <Link key={char.id} href={`/profile/${char.id}`} className="flex items-center gap-3 py-3 border-b border-neutral-100">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-200 text-[16px] font-semibold text-neutral-500">
-                {char.displayName.charAt(0)}
-              </div>
+            <div key={char.id} className="flex items-center gap-3 py-3 border-b border-neutral-100">
+              <Link href={`/profile/${char.id}`}>
+                {char.avatar ? (
+                  <img src={char.avatar} alt={char.displayName} className="h-12 w-12 rounded-full object-cover" />
+                ) : (
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-200 text-[16px] font-semibold text-neutral-500">
+                    {char.displayName.charAt(0)}
+                  </div>
+                )}
+              </Link>
               <div className="flex-1">
                 <div className="flex items-center gap-1">
-                  <span className="text-[14px] font-semibold text-black">{char.displayName}</span>
+                  <Link href={`/profile/${char.id}`} className="text-[14px] font-semibold text-black">{char.displayName}</Link>
                   <span className="rounded bg-neutral-100 px-1 py-0.5 text-[8px] font-medium text-neutral-500">AI</span>
                 </div>
                 <span className="text-[12px] text-neutral-500">@{char.username}</span>
               </div>
               <button
-                onClick={(e) => { e.preventDefault(); handleFollow(char.id); }}
+                type="button"
+                onClick={() => handleFollow(char.id)}
                 className={`rounded-lg px-4 py-1.5 text-[12px] font-semibold ${followedIds.has(char.id) ? 'border border-neutral-200 bg-white text-black' : 'bg-black text-white'}`}
               >{followedIds.has(char.id) ? 'Following' : 'Follow'}</button>
-            </Link>
+            </div>
           ))}
         </div>
       ) : (
@@ -110,9 +124,13 @@ export default function DiscoverPage() {
             <div className="flex gap-4 overflow-x-auto">
               {characters.slice(0, 8).map((char) => (
                 <Link key={char.id} href={`/profile/${char.id}`} className="flex shrink-0 flex-col items-center gap-1">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-neutral-200 text-[20px] font-semibold text-neutral-500">
-                    {char.displayName.charAt(0)}
-                  </div>
+                  {char.avatar ? (
+                    <img src={char.avatar} alt={char.displayName} className="h-16 w-16 rounded-full object-cover" />
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-neutral-200 text-[20px] font-semibold text-neutral-500">
+                      {char.displayName.charAt(0)}
+                    </div>
+                  )}
                   <span className="w-16 truncate text-center text-[11px] text-black">{char.displayName}</span>
                 </Link>
               ))}
@@ -157,9 +175,13 @@ export default function DiscoverPage() {
             <h2 className="mb-3 text-[16px] font-semibold text-black">Suggested for You</h2>
             {characters.map((char) => (
               <Link key={char.id} href={`/profile/${char.id}`} className="flex items-center gap-3 py-2.5">
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-neutral-200 text-[15px] font-semibold text-neutral-500">
-                  {char.displayName.charAt(0)}
-                </div>
+                {char.avatar ? (
+                  <img src={char.avatar} alt={char.displayName} className="h-11 w-11 rounded-full object-cover" />
+                ) : (
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-neutral-200 text-[15px] font-semibold text-neutral-500">
+                    {char.displayName.charAt(0)}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1">
                     <span className="text-[13px] font-semibold text-black">{char.displayName}</span>

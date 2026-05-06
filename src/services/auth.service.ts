@@ -7,7 +7,6 @@ import {
   UnauthorizedError,
   ConflictError,
   ValidationError,
-  NotFoundError,
 } from '../utils/errors';
 import { getFirebaseAdmin } from '../config/firebase';
 import * as admin from 'firebase-admin';
@@ -45,9 +44,23 @@ export class AuthService {
       where: { firebaseUid },
     });
     if (existingByUid) {
-      const token = this.generateAccessToken(existingByUid.id, firebaseUid);
-      const refreshToken = this.generateRefreshToken(existingByUid.id, firebaseUid);
-      return { user: this.sanitizeUser(existingByUid), token, refreshToken, isNewUser: false };
+      const updated = await prisma.user.update({
+        where: { id: existingByUid.id },
+        data: {
+          username,
+          displayName: input.displayName,
+          onboardingStep: 1,
+          onboardingCompletedAt: null,
+        },
+      });
+      const token = this.generateAccessToken(updated.id, firebaseUid);
+      const refreshToken = this.generateRefreshToken(updated.id, firebaseUid);
+      return {
+        user: this.sanitizeUser(updated),
+        token,
+        refreshToken,
+        isNewUser: true,
+      };
     }
 
     // Email uniqueness is still enforced (one account per email)
@@ -61,7 +74,13 @@ export class AuthService {
     }
 
     // Usernames are NOT unique — no duplicate check needed
-    const user = await this.createUserRecord(firebaseUid, email, username, input.displayName);
+    const user = await this.createUserRecord(
+      firebaseUid,
+      email,
+      username,
+      input.displayName,
+      1
+    );
     const token = this.generateAccessToken(user.id, firebaseUid);
     const refreshToken = this.generateRefreshToken(user.id, firebaseUid);
 
@@ -84,9 +103,29 @@ export class AuthService {
       where: { firebaseUid: decoded.uid },
     });
 
-    // No DB record yet → tell the client this is a new user
+    // No DB record yet → create a temporary user record for onboarding
     if (!user) {
-      throw new NotFoundError('No account found for this Firebase user. Please register first.');
+      const email = decoded.email || '';
+      const username = decoded.email?.split('@')[0] || 'user';
+      const displayName = decoded.displayName || decoded.email?.split('@')[0] || 'User';
+      
+      const newUser = await this.createUserRecord(
+        decoded.uid,
+        email,
+        username,
+        displayName,
+        0
+      );
+      
+      const token = this.generateAccessToken(newUser.id, decoded.uid);
+      const refreshToken = this.generateRefreshToken(newUser.id, decoded.uid);
+      
+      return {
+        user: this.sanitizeUser(newUser),
+        token,
+        refreshToken,
+        isNewUser: true,
+      };
     }
 
     if (user.isBanned) {
@@ -101,7 +140,12 @@ export class AuthService {
     const token = this.generateAccessToken(user.id, user.firebaseUid);
     const refreshToken = this.generateRefreshToken(user.id, user.firebaseUid);
 
-    return { user: this.sanitizeUser(user), token, refreshToken, isNewUser: false };
+    return {
+      user: this.sanitizeUser(user),
+      token,
+      refreshToken,
+      isNewUser: user.onboardingStep < 4,
+    };
   }
 
   /**
@@ -136,7 +180,13 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(input.password, 12);
     const firebaseUid = `local_${Buffer.from(passwordHash).toString('base64').slice(0, 28)}`;
 
-    const user = await this.createUserRecord(firebaseUid, input.email, username, input.displayName);
+    const user = await this.createUserRecord(
+      firebaseUid,
+      input.email,
+      username,
+      input.displayName,
+      4
+    );
     const token = this.generateAccessToken(user.id, firebaseUid);
     const refreshToken = this.generateRefreshToken(user.id, firebaseUid);
 
@@ -246,7 +296,8 @@ export class AuthService {
     firebaseUid: string,
     email: string,
     username: string,
-    displayName: string
+    displayName: string,
+    onboardingStep = 1
   ) {
     const user = await prisma.user.create({
       data: {
@@ -265,6 +316,9 @@ export class AuthService {
         isPremium: false,
         isActive: true,
         isBanned: false,
+        onboardingStep,
+        onboardingInterests: [],
+        onboardingCompletedAt: onboardingStep >= 4 ? new Date() : null,
       },
     });
 

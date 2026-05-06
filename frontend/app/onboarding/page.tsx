@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Sparkles } from 'lucide-react';
@@ -10,7 +10,7 @@ type SignUpView = 'welcome' | 'email';
 
 export default function OnboardingWelcome() {
   const router = useRouter();
-  const { loginWithGoogle, registerWithEmail } = useAuth();
+  const { loginWithGoogle, registerWithEmail, isAuthenticated, isNewUser, isLoading } = useAuth();
 
   const [view, setView] = useState<SignUpView>('welcome');
   const [email, setEmail] = useState('');
@@ -18,6 +18,13 @@ export default function OnboardingWelcome() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (isAuthenticated) {
+      router.replace(isNewUser ? '/onboarding/handle' : '/feed');
+    }
+  }, [isAuthenticated, isNewUser, isLoading, router]);
 
   const handleGoogleSignUp = async () => {
     setLoading(true);

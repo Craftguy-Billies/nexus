@@ -51,9 +51,13 @@ export default function MessagesPage() {
           className="flex items-center gap-3 border-b border-neutral-100 px-4 py-3 active:bg-neutral-50"
         >
           <div className="relative">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-neutral-200 text-[18px] font-semibold text-neutral-500">
-              {(conv.aiCharacter?.displayName || 'A').charAt(0)}
-            </div>
+            {conv.aiCharacter?.avatar ? (
+              <img src={conv.aiCharacter.avatar} alt={conv.aiCharacter.displayName} className="h-14 w-14 rounded-full object-cover" />
+            ) : (
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-neutral-200 text-[18px] font-semibold text-neutral-500">
+                {(conv.aiCharacter?.displayName || 'A').charAt(0)}
+              </div>
+            )}
             <div className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-green-400" />
           </div>
           <div className="flex-1 min-w-0">

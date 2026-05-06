@@ -1,4 +1,5 @@
 import { Worker, Job } from 'bullmq';
+import net from 'node:net';
 import { config } from '../config';
 import prisma from '../config/database';
 import { aiService } from '../services/ai.service';
@@ -14,6 +15,27 @@ const connection = {
   host: new URL(config.redis.url).hostname || 'localhost',
   port: parseInt(new URL(config.redis.url).port || '6379', 10),
 };
+
+async function isRedisReachable(
+  host: string,
+  port: number,
+  timeoutMs = 1500
+): Promise<boolean> {
+  return await new Promise((resolve) => {
+    const socket = net.createConnection({ host, port });
+
+    const finish = (ok: boolean) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(ok);
+    };
+
+    socket.setTimeout(timeoutMs);
+    socket.on('connect', () => finish(true));
+    socket.on('timeout', () => finish(false));
+    socket.on('error', () => finish(false));
+  });
+}
 
 /**
  * AI Reaction Worker
@@ -250,8 +272,16 @@ export function startAISchedulerWorker() {
 /**
  * Start all workers
  */
-export function startAllWorkers() {
+export async function startAllWorkers() {
   try {
+    const redisReady = await isRedisReachable(connection.host, connection.port);
+    if (!redisReady) {
+      console.warn(
+        `BullMQ workers disabled: Redis not reachable at ${connection.host}:${connection.port}`
+      );
+      return null;
+    }
+
     const reactionWorker = startAIReactionWorker();
     const schedulerWorker = startAISchedulerWorker();
     console.log('All BullMQ workers started');

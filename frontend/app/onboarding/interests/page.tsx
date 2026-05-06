@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
+import { users as usersApi } from '@/lib/api';
+import { useAuth } from '@/contexts/auth-context';
 
 const INTERESTS = [
   { emoji: '🎮', label: 'Gaming' },
@@ -27,12 +29,49 @@ const INTERESTS = [
 
 export default function OnboardingInterests() {
   const router = useRouter();
+  const { user, isAuthenticated, isNewUser, isLoading, refreshUser } = useAuth();
   const [selected, setSelected] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!isAuthenticated) {
+      router.replace('/onboarding/handle');
+      return;
+    }
+    if (!isNewUser) {
+      router.replace('/feed');
+      return;
+    }
+    if (user && (user.onboardingStep ?? 0) < 1) {
+      router.replace('/onboarding/handle');
+      return;
+    }
+    if (user?.onboardingInterests?.length) {
+      setSelected(user.onboardingInterests);
+    }
+  }, [isLoading, isAuthenticated, isNewUser, user, router]);
 
   const toggle = (label: string) => {
     setSelected((prev) =>
       prev.includes(label) ? prev.filter((l) => l !== label) : prev.length < 5 ? [...prev, label] : prev
     );
+  };
+
+  const handleContinue = async () => {
+    if (selected.length < 3 || saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      await usersApi.saveOnboardingInterests(selected);
+      await refreshUser();
+      router.push('/onboarding/friends');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save interests');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -42,8 +81,8 @@ export default function OnboardingInterests() {
       </button>
 
       <div className="mb-2 flex gap-1">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className={`h-1 flex-1 rounded-full ${i <= 3 ? 'bg-black' : 'bg-neutral-200'}`} />
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className={`h-1 flex-1 rounded-full ${i <= 2 ? 'bg-black' : 'bg-neutral-200'}`} />
         ))}
       </div>
 
@@ -51,6 +90,10 @@ export default function OnboardingInterests() {
       <p className="mb-6 text-[13px] text-neutral-500">
         Pick 3-5 interests. We&apos;ll introduce you to AI characters who share them.
       </p>
+
+      {error && (
+        <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-600">{error}</div>
+      )}
 
       <div className="grid grid-cols-3 gap-2">
         {INTERESTS.map(({ emoji, label }) => {
@@ -74,11 +117,11 @@ export default function OnboardingInterests() {
 
       <div className="mt-auto pt-6">
         <button
-          onClick={() => router.push('/onboarding/friends')}
-          disabled={selected.length < 3}
+          onClick={handleContinue}
+          disabled={selected.length < 3 || saving}
           className="w-full rounded-lg bg-black py-3.5 text-[15px] font-semibold text-white disabled:opacity-40 active:opacity-80"
         >
-          Continue
+          {saving ? 'Saving...' : 'Continue'}
         </button>
       </div>
     </div>

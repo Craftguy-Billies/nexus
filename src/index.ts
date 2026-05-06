@@ -13,7 +13,7 @@ async function main() {
     // Start BullMQ workers (optional - requires Redis)
     try {
       const { startAllWorkers } = await import('./jobs/workers');
-      startAllWorkers();
+      await startAllWorkers();
     } catch (err) {
       console.warn('BullMQ workers not started (Redis may not be available):', (err as Error).message);
     }

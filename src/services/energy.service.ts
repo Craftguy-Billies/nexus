@@ -131,19 +131,20 @@ export class EnergyService {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const lastStreak = new Date(inventory.lastStreakDate);
-    lastStreak.setHours(0, 0, 0, 0);
 
-    const dayDiff = Math.floor(
-      (today.getTime() - lastStreak.getTime()) / (1000 * 60 * 60 * 24)
-    );
+    const lastClaim = inventory.lastStreakClaimAt
+      ? new Date(inventory.lastStreakClaimAt)
+      : null;
+    if (lastClaim) lastClaim.setHours(0, 0, 0, 0);
 
-    if (dayDiff === 0) {
+    if (lastClaim && lastClaim.getTime() === today.getTime()) {
       throw new ValidationError('Already claimed today');
     }
 
-    const newStreak = dayDiff === 1 ? inventory.currentStreak + 1 : 1;
-    const longestStreak = Math.max(newStreak, inventory.longestStreak);
+    const dayDiff = lastClaim
+      ? Math.floor((today.getTime() - lastClaim.getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+    const newStreak = dayDiff === 1 ? inventory.dailyStreakDays + 1 : 1;
 
     // Streak rewards
     let energyBonus = 5;
@@ -160,19 +161,24 @@ export class EnergyService {
     await prisma.userInventory.update({
       where: { userId },
       data: {
-        currentStreak: newStreak,
-        longestStreak,
-        lastStreakDate: today,
+        dailyStreakDays: newStreak,
+        lastStreakClaimAt: today,
       },
     });
 
     await this.addEnergy(userId, energyBonus, 'daily_streak');
 
     if (gemsBonus > 0) {
-      await prisma.user.update({
-        where: { id: userId },
-        data: { gemsBalance: { increment: gemsBonus } },
-      });
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: userId },
+          data: { gemsBalance: { increment: gemsBonus } },
+        }),
+        prisma.userInventory.update({
+          where: { userId },
+          data: { gemsBalance: { increment: gemsBonus } },
+        }),
+      ]);
     }
 
     return { streak: newStreak, energyBonus, gemsBonus };

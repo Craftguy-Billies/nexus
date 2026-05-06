@@ -3,8 +3,18 @@ import { NotFoundError, ValidationError } from '../utils/errors';
 import { energyService } from './energy.service';
 import { aiService } from './ai.service';
 
+function hasDMStorage(): boolean {
+  const client = prisma as unknown as Record<string, unknown>;
+  return Boolean(client.conversation && client.directMessage);
+}
+
 export class DMService {
   async getConversations(userId: string, limit = 20, cursor?: string) {
+    if (!hasDMStorage()) {
+      return { items: [], nextToken: null };
+    }
+
+    const prismaAny = prisma as any;
     const where: Record<string, unknown> = { userId };
     if (cursor) {
       where.lastMessageAt = {
@@ -12,7 +22,7 @@ export class DMService {
       };
     }
 
-    const rawConversations = await prisma.conversation.findMany({
+    const rawConversations = await prismaAny.conversation.findMany({
       where,
       take: limit + 1,
       orderBy: { lastMessageAt: 'desc' },
@@ -28,7 +38,7 @@ export class DMService {
     const aiMap = new Map(aiChars.map((a) => [a.id, a]));
 
     const lastMessages = rawConversations.length
-      ? await prisma.directMessage.findMany({
+      ? await prismaAny.directMessage.findMany({
           where: { conversationId: { in: rawConversations.map((c) => c.id) } },
           orderBy: { createdAt: 'desc' },
           distinct: ['conversationId'],
@@ -61,6 +71,11 @@ export class DMService {
     limit = 50,
     cursor?: string
   ) {
+    if (!hasDMStorage()) {
+      return { items: [], nextToken: null, conversationId: null };
+    }
+
+    const prismaAny = prisma as any;
     const conversation = await this.getOrCreateConversation(
       userId,
       aiCharacterId
@@ -75,7 +90,7 @@ export class DMService {
       };
     }
 
-    const messages = await prisma.directMessage.findMany({
+    const messages = await prismaAny.directMessage.findMany({
       where,
       take: limit + 1,
       orderBy: { createdAt: 'desc' },
@@ -96,6 +111,13 @@ export class DMService {
     aiCharacterId: string,
     content: string
   ) {
+    if (!hasDMStorage()) {
+      throw new ValidationError(
+        'Direct message storage is not configured in the current database schema'
+      );
+    }
+
+    const prismaAny = prisma as any;
     if (!content || content.trim().length === 0) {
       throw new ValidationError('Message content is required');
     }
@@ -120,7 +142,7 @@ export class DMService {
     );
 
     // Save user message
-    const userMessage = await prisma.directMessage.create({
+    const userMessage = await prismaAny.directMessage.create({
       data: {
         conversationId: conversation.id,
         senderId: userId,
@@ -130,7 +152,7 @@ export class DMService {
     });
 
     // Get recent messages for context
-    const recentMessages = await prisma.directMessage.findMany({
+    const recentMessages = await prismaAny.directMessage.findMany({
       where: { conversationId: conversation.id },
       orderBy: { createdAt: 'desc' },
       take: 20,
@@ -150,7 +172,7 @@ export class DMService {
     );
 
     // Save AI reply
-    const aiMessage = await prisma.directMessage.create({
+    const aiMessage = await prismaAny.directMessage.create({
       data: {
         conversationId: conversation.id,
         senderId: aiCharacterId,
@@ -160,7 +182,7 @@ export class DMService {
     });
 
     // Update conversation
-    await prisma.conversation.update({
+    await prismaAny.conversation.update({
       where: { id: conversation.id },
       data: {
         lastMessageAt: new Date(),
@@ -193,12 +215,13 @@ export class DMService {
     userId: string,
     aiCharacterId: string
   ) {
-    let conversation = await prisma.conversation.findUnique({
+    const prismaAny = prisma as any;
+    let conversation = await prismaAny.conversation.findUnique({
       where: { userId_aiCharacterId: { userId, aiCharacterId } },
     });
 
     if (!conversation) {
-      conversation = await prisma.conversation.create({
+      conversation = await prismaAny.conversation.create({
         data: { userId, aiCharacterId },
       });
     }
@@ -210,8 +233,10 @@ export class DMService {
     conversationId: string,
     messages: { role: string; content: string }[]
   ) {
+    if (!hasDMStorage()) return;
+    const prismaAny = prisma as any;
     const result = await aiService.summarizeConversation(messages);
-    await prisma.conversation.update({
+    await prismaAny.conversation.update({
       where: { id: conversationId },
       data: { messageSummary: result.content },
     });

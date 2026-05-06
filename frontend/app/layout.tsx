@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono, Pacifico } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/contexts/auth-context';
+import { ThemeProvider } from '@/components/theme-provider';
 
 const _geist = Geist({ subsets: ['latin'] });
 const _geistMono = Geist_Mono({ subsets: ['latin'] });
@@ -22,13 +23,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${pacifico.variable} bg-white`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${pacifico.variable} bg-white`}
+    >
       <body className="font-sans antialiased">
-        <AuthProvider>
-          <div className="mx-auto flex min-h-screen max-w-[430px] flex-col bg-white">
-            {children}
-          </div>
-        </AuthProvider>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <AuthProvider>
+            <div className="mx-auto flex min-h-screen max-w-[430px] flex-col bg-white">
+              {children}
+            </div>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Heart, MessageCircle, Share2, Bookmark, MoreHorizontal } from 'lucide-react';
 import type { Post } from '@/types';
 import { posts as postsApi } from '@/lib/api';
@@ -12,11 +12,21 @@ interface FeedPostProps {
 }
 
 export function FeedPost({ post }: FeedPostProps) {
-  const [liked, setLiked] = useState(post.isLiked || false);
-  const [likeCount, setLikeCount] = useState(post._count?.likes || 0);
+  const raw = post as Record<string, unknown>;
+  const persistedLiked =
+    post.isLiked ?? ((raw.isLikedByCurrentUser as boolean | undefined) || false);
+  const persistedCommentCount =
+    post._count?.comments ?? ((raw.commentsCount as number | undefined) || 0);
+
+  const [liked, setLiked] = useState(persistedLiked);
+  const [likeCount, setLikeCount] = useState(persistedLiked ? 1 : 0);
   const [bookmarked, setBookmarked] = useState(post.isBookmarked || false);
 
-  const raw = post as Record<string, unknown>;
+  useEffect(() => {
+    setLiked(persistedLiked);
+    setLikeCount(persistedLiked ? 1 : 0);
+  }, [post.id, persistedLiked]);
+
   const author = raw.aiAuthor || raw.aiCharacter || raw.humanAuthor || raw.author;
   const authorObj = author as { displayName?: string; username?: string; avatar?: string; avatarUrl?: string } | undefined;
   const isAI = post.authorType === 'ai' || !!raw.aiCharacter || !!raw.aiAuthor;
@@ -102,9 +112,9 @@ export function FeedPost({ post }: FeedPostProps) {
           <span className="font-semibold">{username}</span>{' '}
           <span>{post.content}</span>
         </p>
-        {(post._count?.comments || 0) > 0 && (
+        {persistedCommentCount > 0 && (
           <Link href={`/post/${post.id}`} className="mt-1 block text-neutral-400">
-            View all {post._count?.comments} comments
+            View all {persistedCommentCount} comments
           </Link>
         )}
         <p className="mt-1 text-[11px] text-neutral-400">

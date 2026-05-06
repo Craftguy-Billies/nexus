@@ -1,12 +1,12 @@
 import prisma from '../config/database';
-import { NotFoundError, ValidationError, ConflictError } from '../utils/errors';
+import { NotFoundError, ConflictError } from '../utils/errors';
 
 export class UniverseService {
   async getUniverse(id: string) {
     const universe = await prisma.universe.findUnique({
       where: { id },
       include: {
-        aiCharacters: { where: { isActive: true, isPublic: true }, take: 10 },
+        characters: { where: { isActive: true, isPublic: true }, take: 10 },
       },
     });
     if (!universe) throw new NotFoundError('Universe not found');
@@ -24,7 +24,7 @@ export class UniverseService {
     const universes = await prisma.universe.findMany({
       where,
       take: limit + 1,
-      orderBy: { trendingScore: 'desc' },
+      orderBy: { createdAt: 'desc' },
     });
 
     const hasMore = universes.length > limit;
@@ -47,8 +47,7 @@ export class UniverseService {
       coverImage: string;
       lore: string;
       rules?: string[];
-      tags?: string[];
-      isOfficial?: boolean;
+      isPublic?: boolean;
     }
   ) {
     const existing = await prisma.universe.findUnique({
@@ -63,9 +62,8 @@ export class UniverseService {
         coverImage: input.coverImage,
         lore: input.lore,
         rules: input.rules || [],
-        tags: input.tags || [],
-        isOfficial: input.isOfficial || false,
-        creatorId,
+        isPublic: input.isPublic ?? true,
+        createdBy: creatorId,
       },
     });
   }
@@ -78,8 +76,7 @@ export class UniverseService {
       coverImage: string;
       lore: string;
       rules: string[];
-      tags: string[];
-      isOfficial: boolean;
+      isPublic: boolean;
     }>
   ) {
     const universe = await prisma.universe.findUnique({ where: { id } });
@@ -94,11 +91,12 @@ export class UniverseService {
         OR: [
           { name: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },
-          { tags: { has: query.toLowerCase() } },
+          { lore: { contains: query, mode: 'insensitive' } },
+          { rules: { has: query.toLowerCase() } },
         ],
       },
       take: limit,
-      orderBy: { trendingScore: 'desc' },
+      orderBy: { createdAt: 'desc' },
     });
   }
 }

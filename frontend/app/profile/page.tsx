@@ -16,7 +16,8 @@ export default function ProfilePage() {
   const [energyStatus, setEnergyStatus] = useState<EnergyStatus | null>(null);
 
   useEffect(() => {
-    feed.get('following').then((r) => setMyPosts(r.items)).catch(() => {});
+    if (!user) return;
+    feed.getUserPosts(user.id).then((r) => setMyPosts(r.items)).catch(() => {});
     energy.status().then((res) => {
       const r = res as unknown as { energy: number; gems: number; tier: string };
       setEnergyStatus({
@@ -30,7 +31,7 @@ export default function ProfilePage() {
         maxAdsPerDay: 5,
       });
     }).catch(() => {});
-  }, []);
+  }, [user]);
 
   if (!user) return null;
 

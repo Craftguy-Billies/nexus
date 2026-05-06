@@ -3,17 +3,35 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Bot } from 'lucide-react';
-import { aiCharacters } from '@/lib/api';
+import { aiCharacters, users as usersApi } from '@/lib/api';
 import type { AICharacter } from '@/types';
+import { useAuth } from '@/contexts/auth-context';
 
 export default function OnboardingFriends() {
   const router = useRouter();
+  const { user, isAuthenticated, isNewUser, isLoading, refreshUser } = useAuth();
   const [characters, setCharacters] = useState<AICharacter[]>([]);
   const [followed, setFollowed] = useState<Set<string>>(new Set());
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
+    if (isLoading) return;
+    if (!isAuthenticated) {
+      router.replace('/onboarding/handle');
+      return;
+    }
+    if (!isNewUser) {
+      router.replace('/feed');
+      return;
+    }
+    if (user && (user.onboardingStep ?? 0) < 2) {
+      router.replace('/onboarding/interests');
+      return;
+    }
+
     aiCharacters.list({ limit: 6 }).then((res) => setCharacters(res.items)).catch(() => {});
-  }, []);
+  }, [isLoading, isAuthenticated, isNewUser, user, router]);
 
   const toggleFollow = (id: string) => {
     setFollowed((prev) => {
@@ -24,6 +42,21 @@ export default function OnboardingFriends() {
     });
   };
 
+  const handleContinue = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      await usersApi.saveOnboardingFriends(Array.from(followed));
+      await refreshUser();
+      router.push('/onboarding/ready');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save followed friends');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="flex min-h-screen flex-col px-6 py-4">
       <button onClick={() => router.back()} className="mb-4 self-start text-black">
@@ -31,8 +64,8 @@ export default function OnboardingFriends() {
       </button>
 
       <div className="mb-2 flex gap-1">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className={`h-1 flex-1 rounded-full ${i <= 4 ? 'bg-black' : 'bg-neutral-200'}`} />
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className={`h-1 flex-1 rounded-full ${i <= 3 ? 'bg-black' : 'bg-neutral-200'}`} />
         ))}
       </div>
 
@@ -40,6 +73,10 @@ export default function OnboardingFriends() {
       <p className="mb-6 text-[13px] text-neutral-500">
         These AI characters match your interests. You can follow more later.
       </p>
+
+      {error && (
+        <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-600">{error}</div>
+      )}
 
       <div className="flex gap-3 overflow-x-auto pb-4">
         {characters.map((char) => (
@@ -49,9 +86,13 @@ export default function OnboardingFriends() {
           >
             <div className="h-16 rounded-t-xl bg-neutral-100" />
             <div className="-mt-6 flex flex-col items-center px-3 pb-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-white bg-neutral-200 text-[18px] font-semibold text-neutral-600">
-                {char.displayName.charAt(0)}
-              </div>
+              {char.avatar ? (
+                <img src={char.avatar} alt={char.displayName} className="h-12 w-12 rounded-full border-2 border-white object-cover" />
+              ) : (
+                <div className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-white bg-neutral-200 text-[18px] font-semibold text-neutral-600">
+                  {char.displayName.charAt(0)}
+                </div>
+              )}
               <div className="mt-1 flex items-center gap-1">
                 <span className="text-[13px] font-semibold text-black">{char.displayName}</span>
                 <span className="rounded bg-neutral-100 px-1 py-0.5 text-[9px] font-medium text-neutral-500">AI</span>
@@ -99,10 +140,11 @@ export default function OnboardingFriends() {
 
       <div className="mt-auto pt-6">
         <button
-          onClick={() => router.push('/onboarding/ready')}
-          className="w-full rounded-lg bg-black py-3.5 text-[15px] font-semibold text-white active:opacity-80"
+          onClick={handleContinue}
+          disabled={saving}
+          className="w-full rounded-lg bg-black py-3.5 text-[15px] font-semibold text-white active:opacity-80 disabled:opacity-40"
         >
-          Start Using Nexus
+          {saving ? 'Saving...' : 'Start Using Nexus'}
         </button>
       </div>
     </div>

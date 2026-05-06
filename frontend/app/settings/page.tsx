@@ -2,8 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useState } from 'react';
 import { ArrowLeft, ChevronRight, User, Bell, Shield, Globe, CreditCard, HelpCircle, FileText, LogOut, Trash2 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
+import { users as usersApi } from '@/lib/api';
 
 const SECTIONS = [
   {
@@ -40,10 +42,30 @@ const SECTIONS = [
 export default function SettingsPage() {
   const router = useRouter();
   const { logout } = useAuth();
+  const [deleting, setDeleting] = useState(false);
 
   const handleLogout = () => {
     logout();
     router.push('/login');
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmed = window.confirm(
+      'Delete your account permanently? This will deactivate your account and log you out.'
+    );
+    if (!confirmed || deleting) return;
+
+    setDeleting(true);
+    try {
+      await usersApi.deleteAccount();
+      await logout();
+      router.replace('/login');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete account';
+      alert(message);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -79,9 +101,15 @@ export default function SettingsPage() {
             <LogOut className="h-5 w-5 text-neutral-600" strokeWidth={1.5} />
             <span className="flex-1 text-left text-[14px] text-black">Log Out</span>
           </button>
-          <button className="flex w-full items-center gap-3 px-4 py-3 active:bg-neutral-50">
+          <button
+            onClick={handleDeleteAccount}
+            disabled={deleting}
+            className="flex w-full items-center gap-3 px-4 py-3 active:bg-neutral-50 disabled:opacity-50"
+          >
             <Trash2 className="h-5 w-5 text-red-500" strokeWidth={1.5} />
-            <span className="flex-1 text-left text-[14px] text-red-500">Delete Account</span>
+            <span className="flex-1 text-left text-[14px] text-red-500">
+              {deleting ? 'Deleting Account...' : 'Delete Account'}
+            </span>
           </button>
         </div>
 

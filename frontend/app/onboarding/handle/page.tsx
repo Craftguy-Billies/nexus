@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/auth-context';
 
 export default function OnboardingHandle() {
   const router = useRouter();
-  const { firebaseUser, isAuthenticated, isNewUser, completeOnboarding, isLoading } = useAuth();
+  const { user, firebaseUser, isAuthenticated, isNewUser, completeOnboarding, isLoading } = useAuth();
 
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -26,6 +26,16 @@ export default function OnboardingHandle() {
       }
     }
   }, [isLoading, isAuthenticated, isNewUser, firebaseUser, router]);
+
+  useEffect(() => {
+    if (user?.username) {
+      setUsername(user.username);
+      setUsernameValid(/^[a-zA-Z0-9_]{3,30}$/.test(user.username));
+    }
+    if (user?.displayName) {
+      setDisplayName(user.displayName);
+    }
+  }, [user]);
 
   const checkUsername = (val: string) => {
     setUsername(val);
@@ -65,7 +75,7 @@ export default function OnboardingHandle() {
   return (
     <div className="flex min-h-screen flex-col px-6 py-4">
       <div className="mb-2 flex gap-1 mt-4">
-        {[1, 2, 3, 4, 5].map((i) => (
+        {[1, 2, 3, 4].map((i) => (
           <div key={i} className={`h-1 flex-1 rounded-full ${i <= 1 ? 'bg-black' : 'bg-neutral-200'}`} />
         ))}
       </div>

@@ -9,7 +9,15 @@ import { verifyFirebaseToken } from '../config/firebase';
 async function resolveToken(token: string): Promise<AuthPayload | null> {
   // Try local JWT first
   try {
-    return jwt.verify(token, config.jwt.secret) as AuthPayload;
+    const decoded = jwt.verify(token, config.jwt.secret) as AuthPayload;
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, firebaseUid: true, isActive: true, isBanned: true },
+    });
+    if (user && user.isActive && !user.isBanned) {
+      return { userId: user.id, firebaseUid: user.firebaseUid };
+    }
+    return null;
   } catch {
     // Not a local JWT — try Firebase
   }
@@ -19,8 +27,9 @@ async function resolveToken(token: string): Promise<AuthPayload | null> {
   if (decoded) {
     const user = await prisma.user.findUnique({
       where: { firebaseUid: decoded.uid },
+      select: { id: true, isActive: true, isBanned: true },
     });
-    if (user) {
+    if (user && user.isActive && !user.isBanned) {
       return { userId: user.id, firebaseUid: decoded.uid };
     }
   }

@@ -39,7 +39,10 @@ export async function createApp() {
 
   // Middleware
   app.use(helmet({ contentSecurityPolicy: false }));
-  app.use(cors());
+  app.use(cors({
+    origin: ['http://localhost:3000', 'http://localhost:3120', 'http://localhost:3121'],
+    credentials: true,
+  }));
   app.use(express.json({ limit: '10mb' }));
   app.use(morgan('dev'));
   app.use(generalLimiter);

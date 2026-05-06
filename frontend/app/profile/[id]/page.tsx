@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, MessageCircle, MoreHorizontal } from 'lucide-react';
-import { aiCharacters, follows as followsApi } from '@/lib/api';
-import type { AICharacter, PersonalityProfile } from '@/types';
+import { aiCharacters, follows as followsApi, feed } from '@/lib/api';
+import type { AICharacter, PersonalityProfile, Post } from '@/types';
+import { FeedPost } from '@/components/feed-post';
 
 export default function CharacterProfilePage() {
   const { id } = useParams<{ id: string }>();
@@ -13,6 +14,7 @@ export default function CharacterProfilePage() {
   const [char, setChar] = useState<AICharacter | null>(null);
   const [following, setFollowing] = useState(false);
   const [activeTab, setActiveTab] = useState<'posts' | 'likes' | 'about'>('posts');
+  const [posts, setPosts] = useState<Post[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -20,13 +22,24 @@ export default function CharacterProfilePage() {
     followsApi.check(id).then((r) => setFollowing(r.isFollowing)).catch(() => {});
   }, [id]);
 
+  useEffect(() => {
+    if (!id || activeTab !== 'posts') return;
+    feed.getUserPosts(id).then((r) => setPosts(r.items)).catch(() => {});
+  }, [id, activeTab]);
+
   const toggleFollow = async () => {
+    console.log('toggleFollow called', { id, following });
     if (!id) return;
     setFollowing(!following);
     try {
+      console.log('Profile page: Calling follow API:', { id, following });
       if (!following) await followsApi.follow(id, 'ai');
       else await followsApi.unfollow(id);
-    } catch {
+      console.log('Profile page: Follow API call successful');
+      // Refetch character data to update follower count
+      aiCharacters.get(id).then(setChar).catch(() => {});
+    } catch (err) {
+      console.error('Profile page: Follow API call failed:', err);
       setFollowing(following);
     }
   };
@@ -64,9 +77,13 @@ export default function CharacterProfilePage() {
 
       {/* Avatar + Info */}
       <div className="px-4 pb-4">
-        <div className="-mt-10 mb-3 flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-neutral-200 text-[28px] font-semibold text-neutral-500">
-          {char.displayName.charAt(0)}
-        </div>
+        {char.avatar ? (
+          <img src={char.avatar} alt={char.displayName} className="-mt-10 mb-3 h-20 w-20 rounded-full border-4 border-white object-cover" />
+        ) : (
+          <div className="-mt-10 mb-3 flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-neutral-200 text-[28px] font-semibold text-neutral-500">
+            {char.displayName.charAt(0)}
+          </div>
+        )}
 
         <div className="flex items-center gap-2">
           <h1 className="text-[20px] font-semibold text-black">{char.displayName}</h1>
@@ -82,9 +99,9 @@ export default function CharacterProfilePage() {
         </div>
 
         <div className="mt-4 flex gap-6 text-center">
-          <div><p className="text-[16px] font-semibold text-black">{char._count?.posts || 0}</p><p className="text-[12px] text-neutral-500">Posts</p></div>
-          <div><p className="text-[16px] font-semibold text-black">{char._count?.followers || 0}</p><p className="text-[12px] text-neutral-500">Followers</p></div>
-          <div><p className="text-[16px] font-semibold text-black">{char._count?.likes || 0}</p><p className="text-[12px] text-neutral-500">Likes</p></div>
+          <div><p className="text-[16px] font-semibold text-black">{char.totalPosts || 0}</p><p className="text-[12px] text-neutral-500">Posts</p></div>
+          <div><p className="text-[16px] font-semibold text-black">{following ? 1 : 0}</p><p className="text-[12px] text-neutral-500">Followers</p></div>
+          <div><p className="text-[16px] font-semibold text-black">{char.totalLikes || 0}</p><p className="text-[12px] text-neutral-500">Likes</p></div>
         </div>
 
         <div className="mt-4 flex gap-2">
@@ -163,7 +180,12 @@ export default function CharacterProfilePage() {
           </div>
         )}
         {activeTab === 'posts' && (
-          <div className="py-8 text-center text-[13px] text-neutral-400">Posts will appear here</div>
+          <div>
+            {posts.map((post) => <FeedPost key={post.id} post={post} />)}
+            {posts.length === 0 && (
+              <div className="py-12 text-center text-[13px] text-neutral-400">No posts yet</div>
+            )}
+          </div>
         )}
         {activeTab === 'likes' && (
           <div className="py-8 text-center text-[13px] text-neutral-400">Liked posts will appear here</div>

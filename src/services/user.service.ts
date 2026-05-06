@@ -2,6 +2,9 @@ import prisma from '../config/database';
 import { NotFoundError, ValidationError } from '../utils/errors';
 import { PaginatedResult } from '../types';
 import { User } from '@prisma/client';
+import { getFirebaseAdmin } from '../config/firebase';
+import * as admin from 'firebase-admin';
+import { followService } from './follow.service';
 
 export class UserService {
   async getUserById(id: string) {
@@ -87,6 +90,151 @@ export class UserService {
       where: { id: userId },
       data: prefs,
     });
+  }
+
+  async saveOnboardingInterests(userId: string, interests: string[]) {
+    const uniqueInterests = Array.from(
+      new Set(interests.map((item) => item.trim()).filter(Boolean))
+    );
+
+    if (uniqueInterests.length < 3 || uniqueInterests.length > 5) {
+      throw new ValidationError('Select between 3 and 5 interests');
+    }
+
+    return prisma.user.update({
+      where: { id: userId },
+      data: {
+        onboardingInterests: uniqueInterests,
+        onboardingStep: 2,
+        onboardingCompletedAt: null,
+      },
+    });
+  }
+
+  async saveOnboardingFriends(userId: string, aiCharacterIds: string[]) {
+    const uniqueIds = Array.from(new Set(aiCharacterIds.filter(Boolean)));
+
+    if (uniqueIds.length > 0) {
+      const existing = await prisma.aICharacter.findMany({
+        where: {
+          id: { in: uniqueIds },
+          isActive: true,
+          isPublic: true,
+        },
+        select: { id: true },
+      });
+
+      for (const character of existing) {
+        try {
+          await followService.followUser(userId, character.id, 'ai');
+        } catch (err) {
+          // Log error for debugging but don't fail the entire operation
+          console.error('Failed to follow AI character during onboarding:', character.id, err);
+        }
+      }
+    }
+
+    return prisma.user.update({
+      where: { id: userId },
+      data: {
+        onboardingStep: 3,
+        onboardingCompletedAt: null,
+      },
+    });
+  }
+
+  async completeOnboarding(userId: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { onboardingInterests: true },
+    });
+    if (!user) throw new NotFoundError('User not found');
+
+    if (user.onboardingInterests.length < 3) {
+      throw new ValidationError('Please select interests before completing onboarding');
+    }
+
+    return prisma.user.update({
+      where: { id: userId },
+      data: {
+        onboardingStep: 4,
+        onboardingCompletedAt: new Date(),
+      },
+    });
+  }
+
+  async deleteAccount(userId: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        firebaseUid: true,
+        isActive: true,
+      },
+    });
+
+    if (!user) throw new NotFoundError('User not found');
+    if (!user.isActive) {
+      return { message: 'Account already deleted' };
+    }
+
+    const compactId = user.id.replace(/-/g, '');
+    const deletedFirebaseUid = `deleted_${compactId}`;
+    const deletedEmail = `deleted+${compactId}@nexus.local`;
+    const deletedUsername = `deleted_${user.id.slice(0, 8)}`;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.post.updateMany({
+        where: { authorId: userId, authorType: 'human' },
+        data: { isArchived: true },
+      });
+
+      await tx.admin.deleteMany({ where: { userId } });
+
+      await tx.userSubscription.updateMany({
+        where: { userId },
+        data: { status: 'cancelled', tier: 'free' },
+      });
+
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          isActive: false,
+          isBanned: true,
+          banReason: 'account_deleted',
+          username: deletedUsername,
+          displayName: 'Deleted User',
+          email: deletedEmail,
+          firebaseUid: deletedFirebaseUid,
+          bio: null,
+          avatar: null,
+          coverImage: null,
+          expoPushToken: null,
+          notifyNewFollower: false,
+          notifyNewLike: false,
+          notifyNewComment: false,
+          notifyAiInteraction: false,
+          notifySystemAlerts: false,
+          notifyMarketing: false,
+          onboardingStep: 0,
+          onboardingInterests: [],
+          onboardingCompletedAt: null,
+        },
+      });
+    });
+
+    if (!user.firebaseUid.startsWith('local_')) {
+      try {
+        const app = getFirebaseAdmin() as admin.app.App | null;
+        if (app) {
+          await admin.auth(app).deleteUser(user.firebaseUid);
+        }
+      } catch (err) {
+        console.warn('Failed to delete Firebase Auth user during account deletion:', (err as Error).message);
+      }
+    }
+
+    return { message: 'Account deleted successfully' };
   }
 
   async getFollowers(

@@ -8,6 +8,8 @@ export class FollowService {
     followingId: string,
     followingType: AuthorType = 'human'
   ) {
+    console.log('followUser called:', { followerId, followingId, followingType });
+    
     if (followerId === followingId) {
       throw new ValidationError('Cannot follow yourself');
     }
@@ -18,6 +20,11 @@ export class FollowService {
     if (existing) {
       if (existing.status === 'blocked') {
         throw new ValidationError('You are blocked by this user');
+      }
+      // If already following but count is wrong, update the count
+      if (existing.status === 'active') {
+        console.log('Already following, checking and fixing count');
+        await this.syncFollowCount(followingId, followingType);
       }
       throw new ConflictError('Already following');
     }
@@ -40,11 +47,32 @@ export class FollowService {
       },
     });
 
+    console.log('Follow created:', { followerId, followingId, followingType, status });
+
     if (status === 'active') {
       await this.updateFollowCounts(followerId, followingId, followingType, 1);
     }
 
     return follow;
+  }
+
+  private async syncFollowCount(followingId: string, followingType: AuthorType) {
+    const actualCount = await prisma.follow.count({
+      where: { followingId, status: 'active' }
+    });
+    console.log('syncFollowCount:', { followingId, followingType, actualCount });
+    
+    if (followingType === 'human') {
+      await prisma.user.update({
+        where: { id: followingId },
+        data: { followerCount: actualCount }
+      });
+    } else {
+      await prisma.aICharacter.update({
+        where: { id: followingId },
+        data: { followerCount: actualCount }
+      });
+    }
   }
 
   async unfollowUser(followerId: string, followingId: string) {
@@ -154,12 +182,21 @@ export class FollowService {
     });
   }
 
+  async getUserFollows(userId: string) {
+    return prisma.follow.findMany({
+      where: { followerId: userId, status: 'active' },
+      select: { followingId: true, followingType: true },
+    });
+  }
+
   private async updateFollowCounts(
     followerId: string,
     followingId: string,
     followingType: AuthorType,
     delta: number
   ) {
+    console.log('updateFollowCounts called:', { followerId, followingId, followingType, delta });
+    
     // Update follower's followingCount
     await prisma.user.update({
       where: { id: followerId },
@@ -173,10 +210,11 @@ export class FollowService {
         data: { followerCount: { increment: delta } },
       });
     } else {
-      await prisma.aICharacter.update({
+      const result = await prisma.aICharacter.update({
         where: { id: followingId },
         data: { followerCount: { increment: delta } },
       });
+      console.log('AI Character followerCount updated:', result.id, result.followerCount);
     }
   }
 }

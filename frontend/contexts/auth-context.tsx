@@ -18,7 +18,7 @@ import {
   onAuthStateChanged,
   type FirebaseUser,
 } from '@/lib/firebase';
-import { auth as authApi } from '@/lib/api';
+import { ApiError, auth as authApi } from '@/lib/api';
 import type { User } from '@/types';
 
 interface AuthContextType {
@@ -27,13 +27,13 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  /** true if this is the very first time the user has logged in (needs handle setup) */
+  /** true when this account still needs onboarding flow (new or incomplete). */
   isNewUser: boolean;
-  /** Sign in with Google popup. Returns isNewUser flag. */
+  /** Sign in with Google popup. Returns onboarding-required flag. */
   loginWithGoogle: () => Promise<{ isNewUser: boolean }>;
-  /** Sign in with email + password via Firebase. Returns isNewUser flag. */
+  /** Sign in with email + password via Firebase. Returns onboarding-required flag. */
   loginWithEmail: (email: string, password: string) => Promise<{ isNewUser: boolean }>;
-  /** Create a new Firebase email account. Returns isNewUser flag (always true). */
+  /** Create a new Firebase email account. Returns onboarding-required flag (always true). */
   registerWithEmail: (email: string, password: string) => Promise<{ isNewUser: boolean }>;
   /** Complete onboarding: set handle + display name for a new Firebase user. */
   completeOnboarding: (username: string, displayName: string) => Promise<void>;
@@ -50,13 +50,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isNewUser, setIsNewUser] = useState(false);
 
+  const needsOnboarding = (u: User | null): boolean => {
+    if (!u) return false;
+    return (u.onboardingStep ?? 0) < 4;
+  };
+
   const refreshUser = useCallback(async () => {
     try {
       const me = await authApi.me();
       setUser(me);
+      setIsNewUser(needsOnboarding(me));
     } catch {
       setUser(null);
       setToken(null);
+      setIsNewUser(false);
       localStorage.removeItem('nexus_token');
     }
   }, []);
@@ -74,15 +81,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const me = await authApi.me();
             setUser(me);
+            setIsNewUser(needsOnboarding(me));
           } catch {
             // Token expired — try to exchange a fresh Firebase token
             try {
               const idToken = await fbUser.getIdToken(true);
               const res = await authApi.loginFirebase(idToken);
-              localStorage.setItem('nexus_token', res.token);
-              setToken(res.token);
-              setUser(res.user);
-              setIsNewUser((res as { isNewUser?: boolean }).isNewUser ?? false);
+              if ('token' in res) {
+                localStorage.setItem('nexus_token', res.token);
+                setToken(res.token);
+                setUser(res.user);
+                setIsNewUser((res.isNewUser ?? false) || needsOnboarding(res.user));
+              } else {
+                setUser(null);
+                setToken(null);
+                setIsNewUser(true);
+                localStorage.removeItem('nexus_token');
+              }
             } catch {
               // User doesn't exist in DB yet (new user) — leave user as null
               setUser(null);
@@ -114,16 +129,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const idToken = await fbUser.getIdToken();
       try {
         const res = await authApi.loginFirebase(idToken);
-        localStorage.setItem('nexus_token', res.token);
-        setToken(res.token);
-        setUser(res.user);
-        const newUser = (res as { isNewUser?: boolean }).isNewUser ?? false;
-        setIsNewUser(newUser);
-        return { isNewUser: newUser };
+        if ('token' in res) {
+          localStorage.setItem('nexus_token', res.token);
+          setToken(res.token);
+          setUser(res.user);
+          const onboardingPending = (res.isNewUser ?? false) || needsOnboarding(res.user);
+          setIsNewUser(onboardingPending);
+          return { isNewUser: onboardingPending };
+        }
+
+        // New Firebase user with no backend profile yet.
+        setIsNewUser(true);
+        return { isNewUser: true };
       } catch (err: unknown) {
         // 404 means the Firebase account exists but no DB record yet → new user
-        const message = err instanceof Error ? err.message : String(err);
-        if (message.includes('404') || message.includes('not found') || message.includes('register')) {
+        if (err instanceof ApiError && (err.status === 404 || err.code === 'NOT_FOUND')) {
           setIsNewUser(true);
           return { isNewUser: true };
         }
@@ -167,7 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('nexus_token', res.token);
       setToken(res.token);
       setUser(res.user);
-      setIsNewUser(false);
+      setIsNewUser((res.isNewUser ?? false) || needsOnboarding(res.user));
     },
     [firebaseUser]
   );
